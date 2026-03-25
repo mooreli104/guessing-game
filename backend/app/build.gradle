@@ -25,6 +25,7 @@ dependencies {
     implementation libs.guava
     implementation 'io.javalin:javalin:7.1.0'
     implementation 'com.google.code.gson:gson:2.7'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
 
 }
 
