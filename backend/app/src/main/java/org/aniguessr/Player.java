@@ -5,20 +5,23 @@ import java.util.UUID;
 import io.javalin.websocket.WsContext;
 
 public class Player {
-    private final UUID id;
-    private UUID connectedRoom;
+    private final String id;
+    private String connectedRoom;
     private final String name;
     private final WsContext ctx;
+    private int score;
+
 
     public Player(String name, WsContext ctx) {
-        this.id = UUID.randomUUID();
+        this.id = UUID.randomUUID().toString();
         this.name = name;
         this.ctx = ctx;
         this.connectedRoom = null;
+        this.score = 0;
     }
 
     // getters
-    public UUID getId() {
+    public String getId() {
         return this.id;
     }
 
@@ -30,12 +33,16 @@ public class Player {
         return this.ctx;
     }
 
-    public UUID getRoomCode() {
+    public String getRoomCode() {
         return this.connectedRoom;
     }
 
+    public int getScore(){
+        return this.score;
+    }
+
     // setter only for roomCode since it changes
-    public void joinRoom(UUID code) {
+    public void joinRoom(String code) {
         this.connectedRoom = code;
     }
 }
