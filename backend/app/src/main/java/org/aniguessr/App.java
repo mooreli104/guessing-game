@@ -39,16 +39,32 @@ public class App {
                     switch(type){
                         case "CREATE_ROOM" -> 
                         {
-
+                            Room newRoom = new Room();
+                            Player newPlayer = new Player(node.get("name").asText(), ctx);
+                            newRoom.getPlayers().add(newPlayer);
+                            rooms.put(newRoom.getId(), newRoom);
+                            players.put(newRoom.getId(), newPlayer);
+                            
+                               
                         }
 
                         case "JOIN_ROOM" ->
                         {
+                            Room existingRoom = rooms.get(node.get("code").asText());
+                            Player newPlayer = new Player(node.get("name").asText(), ctx);
+                            existingRoom.getPlayers().add(newPlayer);
+                            rooms.put(existingRoom.getId(), existingRoom);
+                            
+                        }
+
+                        case "GUESS" ->
+                        {
 
                         }
 
-                        case "PLAYER_LIST" ->
+                        case "START_GAME" ->
                         {
+
 
                         }
                     }
