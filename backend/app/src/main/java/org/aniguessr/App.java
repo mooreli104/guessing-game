@@ -14,66 +14,59 @@ public class App {
 
     public static void main(String[] args) {
 
+        Map<String, Room> rooms = new ConcurrentHashMap<>();
+        Map<String, Player> players = new ConcurrentHashMap<>();
+        var objectMapper = new ObjectMapper();
+
         var app = Javalin.create(config -> {
             config.routes.get("/health", ctx -> {
                 ctx.status(200).json(Map.of("status", "running"));
             });
 
-            Map<String, Room> rooms = new ConcurrentHashMap<>();
-            Map<String, Player> players = new ConcurrentHashMap<>();
-            var objectMapper = new ObjectMapper();
+            config.routes.get("/rooms", ctx -> {
+                System.out.println(rooms.toString());
+            });
 
             config.routes.ws("/websocket/game", ws -> {
-                ws.onConnect(ctx -> System.out.println("Connected"));
+                ws.onConnect(ctx -> {
+                    System.out.println("Connected");
+                });
 
-                ws.onMessage(ctx -> {
+                ws.onMessage(ctx ->{
                     var node = objectMapper.readTree(ctx.message());
                     var type = node.get("type").asText();
+                    
+                    switch(type){
+                        case "CREATE_ROOM" -> 
+                        {
 
-                    switch (type) {
-                        case "CREATE_ROOM" -> {
-                            var name = node.get("name").asText();
-                            var room = new Room();
-                            var player = new Player(name, ctx);
-                            room.getPlayers().add(player);
-                            rooms.put(room.getId().toString(), room);
-                            players.put(player.getCtx().toString(), player);
-                            ctx.send(Map.of(
-                                    "type", "ROOM_CREATED",
-                                    "code", room.getId()));
                         }
-                        case "JOIN_ROOM" -> {
-                            var code = node.get("code").asText();
-                            var name = node.get("name").asText();
-                            var room = rooms.get(code);
-                            if (room == null) {
-                                ctx.send(Map.of("type", "ERROR", "message", "Room not found"));
-                                return;
-                            }
-                            room.getPlayers().add(new Player(name, ctx));
-                            room.broadcast(Map.of(
-                                    "type", "PLAYER_LIST",
-                                    "players", room.getPlayers().stream()
-                                            .map(p -> p.getName())
-                                            .toList()));
+
+                        case "JOIN_ROOM" ->
+                        {
+
+                        }
+
+                        case "PLAYER_LIST" ->
+                        {
+
                         }
                     }
                 });
 
                 ws.onClose(ctx -> {
-                    Player player = players.get(ctx.toString());
-                    Room room = rooms.get(player.getRoomCode().toString());
-                    room.getPlayers().remove(player);
-                    room.broadcast(Map.of(
-                            "type", "PLAYER_LIST",
-                            "players", room.getPlayers().stream()
-                                    .map(p -> p.getName())
-                                    .toList()));
+                    System.out.println("Disconnected");
                 });
 
             });
         });
 
         app.start(7070);
+    }
+
+    public void broadcast(Room room){
+        for(Player x: room.getPlayers()){
+            x.getCtx().send("Hello World");
+        }
     }
 }
