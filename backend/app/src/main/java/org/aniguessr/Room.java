@@ -5,15 +5,19 @@ import java.util.Map;
 import java.util.UUID;
 
 public class Room {
-    private final UUID roomId;
+    private final String id;
     private List<Player> connectedPlayers;
+    private String host;
+    private GameState state;
+    private int round;
+    private Anime anime;
 
     public Room() {
-        this.roomId = UUID.randomUUID();
+        this.id = UUID.randomUUID().toString();
     }
 
-    public UUID getId() {
-        return this.roomId;
+    public String getId() {
+        return this.id;
     }
 
     public List<Player> getPlayers() {
