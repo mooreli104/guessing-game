@@ -6,16 +6,45 @@ package org.aniguessr;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.javalin.Javalin;
+import io.javalin.websocket.WsMessageContext;
 
 public class App {
 
+    // 1. Make the maps static so they are shared globally
+    private static Map<String, Room> rooms = new ConcurrentHashMap<>();
+    private static Map<String, Player> players = new ConcurrentHashMap<>();
+
+    // 2. Make the method static so it can be called from main()
+    public static String createRoom(JsonNode node, WsMessageContext ctx){
+        Player newPlayer = new Player(node.get("name").asText(), ctx);
+        Room newRoom = new Room(newPlayer.getId());
+        newRoom.getPlayers().add(newPlayer);
+        
+        // Accessing the static maps
+        rooms.put(newRoom.getId(), newRoom);
+        players.put(newRoom.getId(), newPlayer);   
+        
+        return newRoom.getId();
+    }
+
+    public static void joinRoom(JsonNode node, WsMessageContext ctx){
+        Room existingRoom = rooms.get(node.get("code").asText());
+        Player newPlayer = new Player(node.get("name").asText(), ctx);
+        existingRoom.getPlayers().add(newPlayer);
+        rooms.put(existingRoom.getId(), existingRoom);
+    }
+
+    public static void broadcast(Room room){
+        for(Player x: room.getPlayers()){
+            x.getCtx().send("Hello World");
+        }
+    }
     public static void main(String[] args) {
 
-        Map<String, Room> rooms = new ConcurrentHashMap<>();
-        Map<String, Player> players = new ConcurrentHashMap<>();
         var objectMapper = new ObjectMapper();
 
         var app = Javalin.create(config -> {
@@ -38,28 +67,20 @@ public class App {
                     
                     switch(type){
                         case "CREATE_ROOM" -> 
-                        {
-                            Room newRoom = new Room();
-                            Player newPlayer = new Player(node.get("name").asText(), ctx);
-                            newRoom.getPlayers().add(newPlayer);
-                            rooms.put(newRoom.getId(), newRoom);
-                            players.put(newRoom.getId(), newPlayer);
+                        {   
+                            String code = createRoom(node, ctx);
+                            ctx.send(code);
                             
-                               
                         }
 
                         case "JOIN_ROOM" ->
                         {
-                            Room existingRoom = rooms.get(node.get("code").asText());
-                            Player newPlayer = new Player(node.get("name").asText(), ctx);
-                            existingRoom.getPlayers().add(newPlayer);
-                            rooms.put(existingRoom.getId(), existingRoom);
-                            
+                            joinRoom(node, ctx);
                         }
 
                         case "GUESS" ->
                         {
-
+                            
                         }
 
                         case "START_GAME" ->
@@ -71,18 +92,12 @@ public class App {
                 });
 
                 ws.onClose(ctx -> {
-                    System.out.println("Disconnected");
+                    System.out.println("Disconnected: " + ctx.reason());
                 });
 
             });
         });
 
         app.start(7070);
-    }
-
-    public void broadcast(Room room){
-        for(Player x: room.getPlayers()){
-            x.getCtx().send("Hello World");
-        }
     }
 }

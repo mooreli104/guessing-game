@@ -1,5 +1,6 @@
 package org.aniguessr;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -12,8 +13,13 @@ public class Room {
     private int round;
     private Anime anime;
 
-    public Room() {
+    public Room(String host) {
         this.id = UUID.randomUUID().toString();
+        this.connectedPlayers = new ArrayList<>();
+        this.host = host;
+        this.state = GameState.LOBBY;
+        this.round = 1;
+        this.anime = new Anime();
     }
 
     public String getId() {
@@ -28,5 +34,10 @@ public class Room {
         for (var player : connectedPlayers) {
             player.getCtx().send(message);
         }
+    }
+
+    @Override
+    public String toString() {
+        return this.connectedPlayers.toString();
     }
 }

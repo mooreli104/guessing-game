@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <input id="name" placeholder="Your name" />
+    <button onclick="createRoom()">Create Room</button>
+    <br/>
+    <input id="code" placeholder="Room code" />
+    <button onclick="joinRoom()">Join Room</button>
+    <pre id="log"></pre>
+
+    <script>
+        var ws = new WebSocket("ws://localhost:7070/websocket/game");
+
+        ws.onmessage = function(event) {
+            document.getElementById("log").textContent += event.data + "\n";
+        };
+
+        function createRoom() {
+            ws.send(JSON.stringify({
+                type: "CREATE_ROOM",
+                name: document.getElementById("name").value
+            }));
+        }
+
+        function joinRoom() {
+            ws.send(JSON.stringify({
+                type: "JOIN_ROOM",
+                code: document.getElementById("code").value,
+                name: document.getElementById("name").value
+            }));
+        }
+
+        function guess() {
+            ws.send(JSON.stringify({
+                type: "GUESS",
+                guess: document.getElementById("guess").value
+            }));
+        }
+
+
+        function startGame() {
+            ws.send(JSON.stringify({
+                type: "START_GAME",
+            }));
+        }
+    </script>
+</body>
+</html>
