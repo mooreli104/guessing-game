@@ -8,14 +8,12 @@ public class Player {
     private final String id;
     private String connectedRoom;
     private final String name;
-    private final WsContext ctx;
     private int score;
 
 
-    public Player(String name, WsContext ctx) {
-        this.id = UUID.randomUUID().toString();
+    public Player(String name, String id) {
+        this.id = id;
         this.name = name;
-        this.ctx = ctx;
         this.connectedRoom = null;
         this.score = 0;
     }
@@ -27,10 +25,6 @@ public class Player {
 
     public String getName() {
         return this.name;
-    }
-
-    public WsContext getCtx() {
-        return this.ctx;
     }
 
     public String getRoomCode() {
