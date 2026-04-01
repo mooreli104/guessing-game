@@ -11,8 +11,8 @@ public class Player {
     private int score;
 
 
-    public Player(String name, String id) {
-        this.id = id;
+    public Player(String name, String sessionId) {
+        this.id = sessionId;
         this.name = name;
         this.connectedRoom = null;
         this.score = 0;
