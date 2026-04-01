@@ -4,56 +4,27 @@
 package org.aniguessr;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.javalin.Javalin;
-import io.javalin.websocket.WsMessageContext;
 
 public class App {
 
-    // 1. Make the maps static so they are shared globally
-    private static Map<String, Room> rooms = new ConcurrentHashMap<>();
-    private static Map<String, Player> players = new ConcurrentHashMap<>();
-
-    // 2. Make the method static so it can be called from main()
-    public static String createRoom(JsonNode node, WsMessageContext ctx){
-        Player newPlayer = new Player(node.get("name").asText(), ctx);
-        Room newRoom = new Room(newPlayer.getId());
-        newRoom.getPlayers().add(newPlayer);
-        
-        // Accessing the static maps
-        rooms.put(newRoom.getId(), newRoom);
-        players.put(newRoom.getId(), newPlayer);   
-        
-        return newRoom.getId();
-    }
-
-    public static void joinRoom(JsonNode node, WsMessageContext ctx){
-        Room existingRoom = rooms.get(node.get("code").asText());
-        Player newPlayer = new Player(node.get("name").asText(), ctx);
-        existingRoom.getPlayers().add(newPlayer);
-        rooms.put(existingRoom.getId(), existingRoom);
-    }
-
-    public static void broadcast(Room room){
-        for(Player x: room.getPlayers()){
-            x.getCtx().send("Hello World");
-        }
-    }
     public static void main(String[] args) {
 
         var objectMapper = new ObjectMapper();
+        var gameManager = new GameManager();
 
         var app = Javalin.create(config -> {
+
+
             config.routes.get("/health", ctx -> {
                 ctx.status(200).json(Map.of("status", "running"));
             });
 
             config.routes.get("/rooms", ctx -> {
-                System.out.println(rooms.toString());
+                System.out.println(gameManager.getAllRoomsSnapshot());
             });
 
             config.routes.ws("/websocket/game", ws -> {
@@ -68,14 +39,15 @@ public class App {
                     switch(type){
                         case "CREATE_ROOM" -> 
                         {   
-                            String code = createRoom(node, ctx);
+                            String code = gameManager.createRoom(node, ctx);
                             ctx.send(code);
                             
                         }
 
                         case "JOIN_ROOM" ->
                         {
-                            joinRoom(node, ctx);
+                            gameManager.joinRoom(node, ctx);
+                            gameManager.broadcastPlayers(ctx);
                         }
 
                         case "GUESS" ->
@@ -92,7 +64,10 @@ public class App {
                 });
 
                 ws.onClose(ctx -> {
-                    System.out.println("Disconnected: " + ctx.reason());
+                    System.out.println(ctx.sessionId + " Disconnected: " + ctx.reason());
+                    gameManager.leaveRoom(ctx);
+                    gameManager.broadcastPlayers(ctx);
+                    
                 });
 
             });
