@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <body>
-    <input id="name" placeholder="Your name" />
+    <input id="username" placeholder="Your name" />
     <button onclick="createRoom()">Create Room</button>
     <br/>
     <input id="code" placeholder="Room code" />
@@ -18,7 +18,7 @@
         function createRoom() {
             ws.send(JSON.stringify({
                 type: "CREATE_ROOM",
-                name: document.getElementById("name").value
+                username: document.getElementById("username").value
             }));
         }
 
@@ -26,7 +26,7 @@
             ws.send(JSON.stringify({
                 type: "JOIN_ROOM",
                 code: document.getElementById("code").value,
-                name: document.getElementById("name").value
+                username: document.getElementById("username").value
             }));
         }
 
