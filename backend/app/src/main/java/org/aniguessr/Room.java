@@ -37,6 +37,10 @@ public class Room {
         return Map.copyOf(this.connectedPlayers);
     }
 
+    public boolean isEmpty(){
+        return this.connectedPlayers.isEmpty();
+    }
+
     @Override
     public String toString() {
         return this.connectedPlayers.toString();
