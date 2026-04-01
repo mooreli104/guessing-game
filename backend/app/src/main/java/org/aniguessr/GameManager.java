@@ -12,9 +12,10 @@ import io.javalin.websocket.WsContext;
 
 public class GameManager {
     
+    record ConnectedPlayer(Player player, WsContext ctx) {}
+
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
-    private final Map<String, Player> players = new ConcurrentHashMap<>();
-    private final Map<String, WsContext> sessionToCtx = new ConcurrentHashMap<>();
+    private final Map <String, ConnectedPlayer> connections = new ConcurrentHashMap<>();
 
     public String createRoom(JsonNode node, WsContext ctx) {
         String username = node.get("username").asText();
@@ -22,10 +23,8 @@ public class GameManager {
         Room newRoom = new Room(newPlayer.getId());
         newRoom.addPlayer(newPlayer.getId(), newPlayer);
         newPlayer.joinRoom(newRoom.getId());
-        
         rooms.put(newRoom.getId(), newRoom);
-        players.put(newPlayer.getId(), newPlayer);   
-        sessionToCtx.put(newPlayer.getId(), ctx);
+        connections.put(newPlayer.getId(), new ConnectedPlayer(newPlayer, ctx));
         
         return newRoom.getId();
     }
@@ -38,19 +37,24 @@ public class GameManager {
             Player newPlayer = new Player(username, ctx.sessionId);
             newPlayer.joinRoom(roomId);
             existingRoom.addPlayer(newPlayer.getId(),newPlayer);
-            players.put(newPlayer.getId(), newPlayer);
-            sessionToCtx.put(newPlayer.getId(), ctx);
+            connections.put(newPlayer.getId(), new ConnectedPlayer(newPlayer, ctx));
         }
     }
 
     public void leaveRoom(WsContext ctx) {
-        Player existingPlayer = players.get(ctx.sessionId);
-        Room room = rooms.get(existingPlayer.getRoomCode());
-        room.removePlayer(existingPlayer.getId());        
+        ConnectedPlayer existingPlayer = connections.get(ctx.sessionId);
+        if(existingPlayer == null) return;
+        connections.remove(existingPlayer.player().getId());
+        Room room = rooms.get(existingPlayer.player().getRoomCode());
+        if(room == null) return;
+        room.removePlayer(existingPlayer.player().getId());   
+        if(room.isEmpty()){
+            rooms.remove(room.getId());
+        }    
     }
 
     public Room getRoom(WsContext ctx){
-        Player player = players.get(ctx.sessionId);
+        Player player = connections.get(ctx.sessionId).player();
         String roomId = player.getRoomCode();
         return rooms.get(roomId);
     }
@@ -58,8 +62,9 @@ public class GameManager {
     public void broadcastPlayers(WsContext ctx) {
         Room room = getRoom(ctx);
         List<String> playersSnapshot = new ArrayList<>(room.getRoomSnapshot().keySet());
-        for(String x: playersSnapshot){
-            sessionToCtx.get(x).send(getRoom(ctx).getRoomSnapshot().toString());
+        for(String sessionId: playersSnapshot){
+            WsContext context = connections.get(sessionId).ctx();
+            context.send(getRoom(context).getRoomSnapshot().toString());
         }
     }
 
