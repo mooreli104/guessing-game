@@ -2,41 +2,26 @@ package org.aniguessr;
 
 import java.util.UUID;
 
-import io.javalin.websocket.WsContext;
-
 public class Player {
     private final String id;
-    private String connectedRoom;
     private final String name;
+    private final String sessionId;
+    private String connectedRoom;
     private int score;
 
-
     public Player(String name, String sessionId) {
-        this.id = sessionId;
+        this.id = UUID.randomUUID().toString();
         this.name = name;
+        this.sessionId = sessionId;
         this.connectedRoom = null;
         this.score = 0;
     }
 
-    // getters
-    public String getId() {
-        return this.id;
-    }
+    public String getId() { return id; }
+    public String getName() { return name; }
+    public String getSessionId() { return sessionId; }
+    public String getRoomCode() { return connectedRoom; }
+    public int getScore() { return score; }
 
-    public String getName() {
-        return this.name;
-    }
-
-    public String getRoomCode() {
-        return this.connectedRoom;
-    }
-
-    public int getScore(){
-        return this.score;
-    }
-
-    // setter only for roomCode since it changes
-    public void joinRoom(String code) {
-        this.connectedRoom = code;
-    }
+    public void joinRoom(String code) { this.connectedRoom = code; }
 }
