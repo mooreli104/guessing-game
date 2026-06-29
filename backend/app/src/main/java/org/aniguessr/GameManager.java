@@ -1,74 +1,99 @@
 package org.aniguessr;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-import com.fasterxml.jackson.databind.JsonNode;
-
-import io.javalin.websocket.WsContext;
-
 
 public class GameManager {
-    
-    record ConnectedPlayer(Player player, WsContext ctx) {}
 
-    private final Map<String, Room> rooms = new ConcurrentHashMap<>();
-    private final Map <String, ConnectedPlayer> connections = new ConcurrentHashMap<>();
+    private final Map<String, Room> rooms = new HashMap<>();
+    private final Map<String, Player> players = new HashMap<>();
+    private final Map<String, String> sessionToPlayer = new HashMap<>();
 
-    public String createRoom(JsonNode node, WsContext ctx) {
-        String username = node.get("username").asText();
-        Player newPlayer = new Player(username, ctx.sessionId);
-        Room newRoom = new Room(newPlayer.getId());
-        newRoom.addPlayer(newPlayer.getId(), newPlayer);
-        newPlayer.joinRoom(newRoom.getId());
-        rooms.put(newRoom.getId(), newRoom);
-        connections.put(newPlayer.getId(), new ConnectedPlayer(newPlayer, ctx));
-        
-        return newRoom.getId();
+    private final SessionSender sender;
+
+    public GameManager(SessionSender sender) {
+        this.sender = sender;
     }
 
-    public void joinRoom(JsonNode node, WsContext ctx) {
-        String username = node.get("username").asText();
-        String roomId = node.get("code").asText();
-        Room existingRoom = rooms.get(roomId);
-        if (existingRoom != null) {
-            Player newPlayer = new Player(username, ctx.sessionId);
-            newPlayer.joinRoom(roomId);
-            existingRoom.addPlayer(newPlayer.getId(),newPlayer);
-            connections.put(newPlayer.getId(), new ConnectedPlayer(newPlayer, ctx));
+    public record JoinResult(String playerId, String roomId) {}
+
+    public JoinResult createRoom(String username, String sessionId) {
+        Player player = new Player(username, sessionId);
+        Room room = new Room();
+        room.addPlayer(player);
+        player.joinRoom(room.getId());
+        rooms.put(room.getId(), room);
+        players.put(player.getId(), player);
+        sessionToPlayer.put(sessionId, player.getId());
+        broadcastRoom(room);
+        return new JoinResult(player.getId(), room.getId());
+    }
+
+    public JoinResult joinRoom(String username, String roomId, String sessionId) {
+        Room room = rooms.get(roomId);
+        if (room == null) {
+            sender.send(sessionId, Map.of("type", "ERROR", "message", "Room not found"));
+            return null;
         }
+        Player player = new Player(username, sessionId);
+        player.joinRoom(roomId);
+        room.addPlayer(player);
+        players.put(player.getId(), player);
+        sessionToPlayer.put(sessionId, player.getId());
+        broadcastRoom(room);
+        return new JoinResult(player.getId(), roomId);
     }
 
-    public void leaveRoom(WsContext ctx) {
-        ConnectedPlayer existingPlayer = connections.get(ctx.sessionId);
-        if(existingPlayer == null) return;
-        connections.remove(existingPlayer.player().getId());
-        Room room = rooms.get(existingPlayer.player().getRoomCode());
-        if(room == null) return;
-        room.removePlayer(existingPlayer.player().getId());   
-        if(room.isEmpty()){
+    public void leaveRoom(String sessionId) {
+        String playerId = sessionToPlayer.remove(sessionId);
+        if (playerId == null) return;
+        Player player = players.remove(playerId);
+        if (player == null) return;
+        Room room = rooms.get(player.getRoomCode());
+        if (room == null) return;
+        room.removePlayer(playerId);
+        if (room.isEmpty()) {
             rooms.remove(room.getId());
-        }    
-    }
-
-    public Room getRoom(WsContext ctx){
-        Player player = connections.get(ctx.sessionId).player();
-        String roomId = player.getRoomCode();
-        return rooms.get(roomId);
-    }
-
-    public void broadcastPlayers(WsContext ctx) {
-        Room room = getRoom(ctx);
-        List<String> playersSnapshot = new ArrayList<>(room.getRoomSnapshot().keySet());
-        for(String sessionId: playersSnapshot){
-            WsContext context = connections.get(sessionId).ctx();
-            context.send(getRoom(context).getRoomSnapshot().toString());
+        } else {
+            broadcastRoom(room);
         }
+    }
+
+    public void startGame(String sessionId) {
+        String playerId = sessionToPlayer.get(sessionId);
+        if (playerId == null) return;
+        Player player = players.get(playerId);
+        if (player == null) return;
+        Room room = rooms.get(player.getRoomCode());
+        if (room == null) return;
+        if (!playerId.equals(room.getHost())) {
+            sender.send(sessionId, Map.of("type", "ERROR", "message", "Only host can start"));
+            return;
+        }
+        // TODO: round/anime setup
     }
 
     public Map<String, Room> getAllRoomsSnapshot() {
-        return Map.copyOf(rooms); 
+        return Map.copyOf(rooms);
+    }
+
+    private void broadcastRoom(Room room) {
+        Map<String, Map<String, Object>> playersPayload = new HashMap<>();
+        for (Player p : room.getPlayers().values()) {
+            Map<String, Object> pp = new HashMap<>();
+            pp.put("name", p.getName());
+            pp.put("score", p.getScore());
+            playersPayload.put(p.getId(), pp);
+        }
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("type", "ROOM_UPDATE");
+        payload.put("roomId", room.getId());
+        payload.put("host", room.getHost());
+        payload.put("state", room.getState().toString());
+        payload.put("players", playersPayload);
+
+        for (Player p : room.getPlayers().values()) {
+            sender.send(p.getSessionId(), payload);
+        }
     }
 }
