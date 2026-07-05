@@ -24,6 +24,7 @@ public class WsRouter implements SessionSender {
 
     public void onConnect(WsConnectContext ctx) {
         sessions.put(ctx.sessionId, ctx);
+        ctx.enableAutomaticPings();
     }
 
     public void onClose(WsCloseContext ctx) {
@@ -62,6 +63,9 @@ public class WsRouter implements SessionSender {
             }
             case "START_GAME" -> gameManager.startGame(ctx.sessionId);
             case "GUESS" -> { /* TODO */ }
+            case "GET_ANIME" -> {
+                Anime.call();
+            }
             default -> send(ctx.sessionId, Map.of(
                 "type", "ERROR",
                 "message", "Unknown type: " + typeNode.asText()
