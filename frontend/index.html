@@ -6,6 +6,8 @@
     <br/>
     <input id="code" placeholder="Room code" />
     <button onclick="joinRoom()">Join Room</button>
+    
+    <button onclick="getAnime()">Get Anime</button>
     <pre id="log"></pre>
 
     <script>
@@ -27,6 +29,13 @@
                 type: "JOIN_ROOM",
                 code: document.getElementById("code").value,
                 username: document.getElementById("username").value
+            }));
+        }
+
+        
+        function getAnime() {
+            ws.send(JSON.stringify({
+                type: "GET_ANIME",
             }));
         }
 
