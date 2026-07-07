@@ -8,12 +8,18 @@
     <button onclick="joinRoom()">Join Room</button>
     
     <button onclick="getAnime()">Get Anime</button>
+    <br/>
+    <img id="animeImg" width="300" />
     <pre id="log"></pre>
 
     <script>
         var ws = new WebSocket("ws://localhost:7070/websocket/game");
 
         ws.onmessage = function(event) {
+            var data = JSON.parse(event.data);
+            if (data.type === "ANIME") {
+                document.getElementById("animeImg").src = data.link;
+            }
             document.getElementById("log").textContent += event.data + "\n";
         };
 
