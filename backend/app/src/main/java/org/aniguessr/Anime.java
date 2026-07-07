@@ -4,13 +4,36 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CompletableFuture;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class Anime {
-    
-    public static void call(){
 
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
+    public record AnimeDTO(String title, String link){}
+
+    public static HttpResponse.BodyHandler<AnimeDTO> responseBodyHandler(){
+        return responseInfo -> HttpResponse.BodySubscribers.mapping(
+            HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8),
+            body -> {
+                try {
+                    JsonNode root = objectMapper.readTree(body);
+                    JsonNode node = root.get("data").get(0).get("node");
+                    String title = node.get("title").asText();
+                    String link = node.get("main_picture").get("medium").asText();
+                    return new AnimeDTO(title, link);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        );
+    }
+
+    public static CompletableFuture<HttpResponse<AnimeDTO>>call(){
         HttpClient client = HttpClient.newBuilder()
         .build();
 
@@ -19,11 +42,6 @@ public class Anime {
             .header("X-MAL-CLIENT-ID", "56c16cf022ffb0fe939e03a8a7c40f5b")
             .build();
 
-        System.out.println(request.toString());
-
-        client.sendAsync(request, BodyHandlers.ofString())
-        .thenApply(HttpResponse::body)
-        .thenAccept(System.out::println)
-        .join();
+        return client.sendAsync(request, responseBodyHandler());
     }
 }
