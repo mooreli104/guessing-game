@@ -33,12 +33,12 @@ public class Anime {
         );
     }
 
-    public static CompletableFuture<HttpResponse<AnimeDTO>>call(){
+    public static CompletableFuture<HttpResponse<AnimeDTO>>call(double offset){
         HttpClient client = HttpClient.newBuilder()
         .build();
 
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create("https://api.myanimelist.net/v2/anime/ranking?ranking_type=all&limit=1&offset=37"))
+            .uri(URI.create("https://api.myanimelist.net/v2/anime/ranking?ranking_type=all&limit=1&offset=" + offset))
             .header("X-MAL-CLIENT-ID", "56c16cf022ffb0fe939e03a8a7c40f5b")
             .build();
 
