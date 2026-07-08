@@ -64,7 +64,7 @@ public class WsRouter implements SessionSender {
             case "START_GAME" -> gameManager.startGame(ctx.sessionId);
             case "GUESS" -> { /* TODO */ }
             case "GET_ANIME" -> {
-                Anime.call().thenAccept(response -> {
+                Anime.call(Math.random()*100).thenAccept(response -> {
                     Anime.AnimeDTO dto = response.body();
                     send(ctx.sessionId, Map.of(
                         "type", "ANIME",
