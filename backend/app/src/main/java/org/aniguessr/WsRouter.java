@@ -29,7 +29,7 @@ public class WsRouter implements SessionSender {
 
     public void onClose(WsCloseContext ctx) {
         sessions.remove(ctx.sessionId);
-        gameManager.leaveRoom(ctx.sessionId);
+        gameManager.handleDisconnect(ctx.sessionId);
     }
 
     public void onMessage(WsMessageContext ctx) throws Exception {
@@ -46,7 +46,8 @@ public class WsRouter implements SessionSender {
                 send(ctx.sessionId, Map.of(
                     "type", "ROOM_CREATED",
                     "playerId", result.playerId(),
-                    "roomId", result.roomId()
+                    "roomId", result.roomId(),
+                    "code", result.code()
                 ));
             }
             case "JOIN_ROOM" -> {
@@ -57,22 +58,26 @@ public class WsRouter implements SessionSender {
                     send(ctx.sessionId, Map.of(
                         "type", "ROOM_JOINED",
                         "playerId", result.playerId(),
-                        "roomId", result.roomId()
+                        "roomId", result.roomId(),
+                        "code", result.code()
                     ));
                 }
             }
-            case "START_GAME" -> gameManager.startGame(ctx.sessionId);
-            case "GUESS" -> { /* TODO */ }
-            case "GET_ANIME" -> {
-                Anime.call(Math.random()*100).thenAccept(response -> {
-                    Anime.AnimeDTO dto = response.body();
-                    send(ctx.sessionId, Map.of(
-                        "type", "ANIME",
-                        "title", dto.title(),
-                        "link", dto.link()
-                    ));
-                });
+            case "RESUME" -> {
+                String playerId = node.get("playerId").asText();
+                String code = node.get("code").asText();
+                gameManager.resume(playerId, code, ctx.sessionId);
             }
+            case "START_GAME" -> {
+                int rounds = node.get("rounds").asInt();
+                int roundSeconds = node.get("roundSeconds").asInt();
+                gameManager.startGame(ctx.sessionId, rounds, roundSeconds);
+            }
+            case "GUESS" -> {
+                String guess = node.get("guess").asText();
+                gameManager.guess(guess, ctx.sessionId);
+            }
+            case "LEAVE_ROOM" -> gameManager.leaveRoom(ctx.sessionId);
             default -> send(ctx.sessionId, Map.of(
                 "type", "ERROR",
                 "message", "Unknown type: " + typeNode.asText()

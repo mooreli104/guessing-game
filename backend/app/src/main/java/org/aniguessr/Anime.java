@@ -1,47 +1,63 @@
 package org.aniguessr;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.CompletableFuture;
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Anime {
+    private String url;
+    private List<String> titles;
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    public Anime(){
+        this.url = "";
+        this.titles = new ArrayList<>();
+    }
 
-    public record AnimeDTO(String title, String link){}
+    public Anime(String url, List<String> titles) {
+        this.url = url;
+        this.titles = titles;
+    }
 
-    public static HttpResponse.BodyHandler<AnimeDTO> responseBodyHandler(){
-        return responseInfo -> HttpResponse.BodySubscribers.mapping(
-            HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8),
-            body -> {
-                try {
-                    JsonNode root = objectMapper.readTree(body);
-                    JsonNode node = root.get("data").get(0).get("node");
-                    String title = node.get("title").asText();
-                    String link = node.get("main_picture").get("medium").asText();
-                    return new AnimeDTO(title, link);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+    public String getUrl() { return url; }
+    public List<String> getTitles() { return titles; }
+
+    // Standard Levenshtein edit distance between two strings.
+    private int distance(String a, String b) {
+        int[] prev = new int[b.length() + 1];
+        int[] curr = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) prev[j] = j;
+
+        for (int i = 1; i <= a.length(); i++) {
+            curr[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = (a.charAt(i - 1) == b.charAt(j - 1)) ? 0 : 1;
+                curr[j] = Math.min(
+                    Math.min(curr[j - 1] + 1, prev[j] + 1),
+                    prev[j - 1] + cost
+                );
             }
-        );
+            int[] tmp = prev;
+            prev = curr;
+            curr = tmp;
+        }
+        return prev[b.length()];
     }
 
-    public static CompletableFuture<HttpResponse<AnimeDTO>>call(double offset){
-        HttpClient client = HttpClient.newBuilder()
-        .build();
+    // True when the guess is close enough to the answer. Short titles must be
+    // near-exact; longer titles tolerate a typo or two.
+    public boolean levanshtein(String answer, String guess){
+        String a = answer.toLowerCase().trim();
+        String g = guess.toLowerCase().trim();
+        if (a.isEmpty() || g.isEmpty()) return false;
 
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create("https://api.myanimelist.net/v2/anime/ranking?ranking_type=all&limit=1&offset=" + offset))
-            .header("X-MAL-CLIENT-ID", "56c16cf022ffb0fe939e03a8a7c40f5b")
-            .build();
-
-        return client.sendAsync(request, responseBodyHandler());
+        int tolerance = a.length() <= 4 ? 0 : (a.length() <= 8 ? 1 : 2);
+        return distance(a, g) <= tolerance;
     }
+
+    public boolean isCorrect(String guess){
+        for(String str: this.titles){
+            if(levanshtein(str, guess)) return true;
+        }
+        return false;
+    }
+
 }

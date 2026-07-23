@@ -5,7 +5,7 @@ import java.util.UUID;
 public class Player {
     private final String id;
     private final String name;
-    private final String sessionId;
+    private String sessionId;
     private String connectedRoom;
     private int score;
 
@@ -22,6 +22,10 @@ public class Player {
     public String getSessionId() { return sessionId; }
     public String getRoomCode() { return connectedRoom; }
     public int getScore() { return score; }
+
+    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+    public void addScore(int points) { this.score += points; }
+    public void resetScore() { this.score = 0; }
 
     public void joinRoom(String code) { this.connectedRoom = code; }
 }
