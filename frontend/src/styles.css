@@ -1,0 +1,125 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: sans-serif;
+  margin: 0;
+  color: #222;
+}
+
+.center {
+  max-width: 480px;
+  margin: 40px auto;
+  text-align: center;
+  padding: 0 16px;
+}
+
+.row {
+  margin-top: 16px;
+}
+
+input {
+  padding: 8px;
+  margin: 4px;
+}
+
+button {
+  padding: 8px 16px;
+  margin: 4px;
+  cursor: pointer;
+}
+
+.error {
+  background: #ffe0e0;
+  color: #a00000;
+  text-align: center;
+  padding: 8px;
+}
+
+/* Lobby */
+.code {
+  font-size: 32px;
+  letter-spacing: 4px;
+  font-weight: bold;
+  margin: 12px 0;
+}
+
+.players {
+  list-style: none;
+  padding: 0;
+}
+
+.players li {
+  padding: 6px;
+  background: #f2f2f2;
+  margin: 4px auto;
+  width: 240px;
+  border-radius: 4px;
+}
+
+.hostControls {
+  margin-top: 24px;
+}
+
+/* Game */
+.game {
+  max-width: 640px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.timer {
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.animeImg {
+  display: block;
+  margin: 16px auto;
+  max-width: 100%;
+  max-height: 320px;
+}
+
+.answer {
+  text-align: center;
+  min-height: 22px;
+  font-weight: bold;
+  color: #333;
+}
+
+.feedback {
+  text-align: center;
+  min-height: 22px;
+  font-weight: bold;
+  color: #227722;
+}
+
+.scores {
+  margin: 16px auto;
+  border-collapse: collapse;
+  min-width: 260px;
+}
+
+.scores td {
+  padding: 6px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.scores .score {
+  text-align: right;
+}
+
+/* Over */
+.winner {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 16px 0;
+  color: #b8860b;
+}

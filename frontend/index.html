@@ -1,63 +1,12 @@
-<!DOCTYPE html>
-<html>
-<body>
-    <input id="username" placeholder="Your name" />
-    <button onclick="createRoom()">Create Room</button>
-    <br/>
-    <input id="code" placeholder="Room code" />
-    <button onclick="joinRoom()">Join Room</button>
-    
-    <button onclick="getAnime()">Get Anime</button>
-    <br/>
-    <img id="animeImg" width="300" />
-    <pre id="log"></pre>
-
-    <script>
-        var ws = new WebSocket("ws://localhost:7070/websocket/game");
-
-        ws.onmessage = function(event) {
-            var data = JSON.parse(event.data);
-            if (data.type === "ANIME") {
-                document.getElementById("animeImg").src = data.link;
-            }
-            document.getElementById("log").textContent += event.data + "\n";
-        };
-
-        function createRoom() {
-            ws.send(JSON.stringify({
-                type: "CREATE_ROOM",
-                username: document.getElementById("username").value
-            }));
-        }
-
-        function joinRoom() {
-            ws.send(JSON.stringify({
-                type: "JOIN_ROOM",
-                code: document.getElementById("code").value,
-                username: document.getElementById("username").value
-            }));
-        }
-
-        
-        function getAnime() {
-            ws.send(JSON.stringify({
-                type: "GET_ANIME",
-            }));
-        }
-
-        function guess() {
-            ws.send(JSON.stringify({
-                type: "GUESS",
-                guess: document.getElementById("guess").value
-            }));
-        }
-
-
-        function startGame() {
-            ws.send(JSON.stringify({
-                type: "START_GAME",
-            }));
-        }
-    </script>
-</body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AniGuessr</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
