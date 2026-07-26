@@ -42,15 +42,33 @@ public class Anime {
         return prev[b.length()];
     }
 
-    // True when the guess is close enough to the answer. Short titles must be
-    // near-exact; longer titles tolerate a typo or two.
+    // How many typos to forgive for a string of this length.
+    private int toleranceFor(String s) {
+        return s.length() <= 4 ? 0 : (s.length() <= 8 ? 1 : 2);
+    }
+
+    // True when the guess is close enough to the answer. As well as a fuzzy match
+    // on the whole title, a guess of at least 5 characters may match a chunk of a
+    // longer title, so "frieren" is accepted for "Sousou no Frieren".
     public boolean levanshtein(String answer, String guess){
         String a = answer.toLowerCase().trim();
         String g = guess.toLowerCase().trim();
         if (a.isEmpty() || g.isEmpty()) return false;
 
-        int tolerance = a.length() <= 4 ? 0 : (a.length() <= 8 ? 1 : 2);
-        return distance(a, g) <= tolerance;
+        // Fuzzy match against the full title.
+        if (distance(a, g) <= toleranceFor(a)) return true;
+
+        if (g.length() >= 5) {
+            // Exact chunk of the title (handles multi-word partials like "mugen train").
+            if (a.contains(g)) return true;
+
+            // Fuzzy match against a single significant word of the title, so a
+            // keyword guess can have a typo too.
+            for (String word : a.split("[^a-z0-9]+")) {
+                if (word.length() >= 5 && distance(word, g) <= toleranceFor(word)) return true;
+            }
+        }
+        return false;
     }
 
     public boolean isCorrect(String guess){
