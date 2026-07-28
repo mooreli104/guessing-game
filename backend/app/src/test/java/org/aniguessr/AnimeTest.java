@@ -70,10 +70,18 @@ class AnimeTest {
     }
 
     @Test
-    void isCorrect_matchesMultiWordPartial() {
+    void isCorrect_matchesBaseNameButNotSubtitle() {
         Anime a = new Anime("u", List.of("Demon Slayer: Mugen Train"));
-        assertTrue(a.isCorrect("mugen train"));
-        assertTrue(a.isCorrect("demon slayer"));
+        assertTrue(a.isCorrect("demon slayer"), "base name is correct");
+        assertFalse(a.isCorrect("mugen train"), "subtitle / arc name is not correct");
+        assertTrue(a.isCorrect("demon slayer: mugen train"), "exact full title still works");
+    }
+
+    @Test
+    void isCorrect_rejectsSubtitleWithDashSeparator() {
+        Anime a = new Anime("u", List.of("Sword Art Online - Alicization"));
+        assertTrue(a.isCorrect("sword art online"), "base name is correct");
+        assertFalse(a.isCorrect("alicization"), "subtitle is not correct");
     }
 
     @Test
