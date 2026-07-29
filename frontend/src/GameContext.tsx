@@ -10,6 +10,9 @@ import {
 import type { ClientMsg, Players, ServerMsg } from "./types";
 
 const WS_URL = "ws://localhost:7070/websocket/game";
+// Round images are served by the backend, not the Vite dev server, so the
+// server-sent "/image/{id}" path has to resolve against this origin.
+const API_URL = "http://localhost:7070";
 
 export type Screen = "home" | "lobby" | "game" | "over";
 
@@ -87,7 +90,7 @@ function reducer(state: State, action: Action): State {
         resuming: false,
         round: msg.round,
         totalRounds: msg.totalRounds,
-        imageUrl: msg.imageUrl,
+        imageUrl: API_URL + msg.imageUrl,
         roundEndsAt: Date.now() + msg.secondsLeft * 1000,
         guessed: false,
         feedback: "",
