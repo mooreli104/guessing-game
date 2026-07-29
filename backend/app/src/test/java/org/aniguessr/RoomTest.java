@@ -108,4 +108,18 @@ class RoomTest {
         r.setRoundTask(null);
         assertNull(r.getRoundTask());
     }
+
+    @Test
+    void usedAnimeIds_accumulateAndClear() {
+        Room room = new Room();
+        assertTrue(room.getUsedAnimeIds().isEmpty());
+
+        room.markAnimeUsed(1);
+        room.markAnimeUsed(2);
+        assertEquals(2, room.getUsedAnimeIds().size());
+        assertTrue(room.getUsedAnimeIds().contains(1));
+
+        room.clearUsedAnime();
+        assertTrue(room.getUsedAnimeIds().isEmpty());
+    }
 }
