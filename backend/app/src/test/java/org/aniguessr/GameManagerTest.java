@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,12 +18,14 @@ import org.junit.jupiter.api.Test;
 class GameManagerTest {
 
     private RecordingSender sender;
+    private FakeAnimeRepository repo;
     private GameManager gm;
 
     @BeforeEach
     void setUp() {
         sender = new RecordingSender();
-        gm = new GameManager(sender);
+        repo = new FakeAnimeRepository();
+        gm = new GameManager(sender, repo);
     }
 
     // Put a room into an active round with a known answer, bypassing the MAL network call.
@@ -294,5 +297,54 @@ class GameManagerTest {
         gm.createRoom("Alice", "s1");
         assertThrows(UnsupportedOperationException.class,
             () -> gm.getAllRoomsSnapshot().put("x", new Room()));
+    }
+
+    // ---- rounds come from the repository ----
+
+    @Test
+    void startGame_withEmptyPool_sendsErrorAndStaysInLobby() {
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        gm.startGame("s1", 3, 30);
+
+        Map<String, Object> last = sender.lastTo("s1");
+        assertEquals("ERROR", last.get("type"));
+        assertTrue(String.valueOf(last.get("message")).contains("No anime loaded"));
+        assertEquals(GameState.LOBBY, gm.getAllRoomsSnapshot().get(host.code()).getState());
+    }
+
+    @Test
+    void startGame_withPool_startsRoundAndServesLocalImageUrl() {
+        repo.save(new Anime(5114, "https://cdn.myanimelist.net/x.jpg",
+            List.of("Fullmetal Alchemist")), new byte[]{1, 2, 3});
+
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        gm.startGame("s1", 1, 30);
+
+        Room room = gm.getAllRoomsSnapshot().get(host.code());
+        assertEquals(GameState.ROUND_ACTIVE, room.getState());
+        assertEquals(5114, room.getAnime().getId());
+        assertTrue(room.getUsedAnimeIds().contains(5114));
+
+        Map<String, Object> start = sender.last("ROUND_START");
+        assertNotNull(start);
+        assertEquals("/image/5114", start.get("imageUrl"));
+    }
+
+    // Driven through startRound rather than startGame, because startGame deliberately
+    // clears the used set — a fresh game is entitled to the whole pool again.
+    @Test
+    void startRound_whenPoolExhausted_clearsUsedAndRetries() {
+        repo.save(new Anime(1, "u", List.of("Only Anime")), new byte[]{1});
+
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        Room room = gm.getAllRoomsSnapshot().get(host.code());
+        room.setTotalRounds(1);
+        room.setRoundSeconds(30);
+        room.markAnimeUsed(1); // the whole pool is excluded
+
+        gm.startRound(room);
+
+        assertEquals(GameState.ROUND_ACTIVE, room.getState());
+        assertEquals(1, room.getAnime().getId());
     }
 }

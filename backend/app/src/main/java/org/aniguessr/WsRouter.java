@@ -16,8 +16,8 @@ public class WsRouter implements SessionSender {
     private final Map<String, WsContext> sessions = new ConcurrentHashMap<>();
     private final GameManager gameManager;
 
-    public WsRouter() {
-        this.gameManager = new GameManager(this);
+    public WsRouter(AnimeRepository repository) {
+        this.gameManager = new GameManager(this, repository);
     }
 
     public GameManager getGameManager() { return gameManager; }

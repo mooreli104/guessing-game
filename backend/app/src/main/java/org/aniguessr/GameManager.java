@@ -24,9 +24,11 @@ public class GameManager {
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     private final SessionSender sender;
+    private final AnimeRepository repository;
 
-    public GameManager(SessionSender sender) {
+    public GameManager(SessionSender sender, AnimeRepository repository) {
         this.sender = sender;
+        this.repository = repository;
     }
 
     public record JoinResult(String playerId, String roomId, String code) {}
@@ -188,32 +190,51 @@ public class GameManager {
             sender.send(sessionId, Map.of("type", "ERROR", "message", "Only host can start"));
             return;
         }
+        // Surface an empty pool at the click, rather than as a dead round.
+        if (repository.count() == 0) {
+            sender.send(sessionId, Map.of("type", "ERROR", "message", "No anime loaded — run ingest"));
+            return;
+        }
         synchronized (room) {
             room.setTotalRounds(Math.max(1, rounds));
             room.setRoundSeconds(Math.max(5, roundSeconds));
             room.setRound(1);
+            room.clearUsedAnime();
             for (Player p : room.getPlayers().values()) p.resetScore();
         }
         startRound(room);
     }
 
-    private void startRound(Room room) {
-        MalClient.fetch(Math.random() * 100).thenAccept(response -> {
-            Anime anime = response.body();
-            synchronized (room) {
-                room.setAnime(anime);
-                room.setState(GameState.ROUND_ACTIVE);
-                room.setRoundStartMillis(System.currentTimeMillis());
-                room.clearGuessed();
+    // Package-private so tests can drive a single round without going through startGame.
+    void startRound(Room room) {
+        Anime anime;
+        try {
+            anime = repository.randomExcluding(room.getUsedAnimeIds());
+            if (anime == null) {
+                // More rounds were asked for than there are anime. Repeats beat a dead round.
+                room.clearUsedAnime();
+                anime = repository.randomExcluding(room.getUsedAnimeIds());
             }
-            broadcast(room, roundStartPayload(room, room.getRoundSeconds()));
-            ScheduledFuture<?> task = scheduler.schedule(
-                () -> endRound(room), room.getRoundSeconds(), TimeUnit.SECONDS);
-            room.setRoundTask(task);
-        }).exceptionally(ex -> {
+        } catch (RuntimeException ex) {
             broadcast(room, Map.of("type", "ERROR", "message", "Could not load anime, try again"));
-            return null;
-        });
+            return;
+        }
+        if (anime == null) {
+            broadcast(room, Map.of("type", "ERROR", "message", "Could not load anime, try again"));
+            return;
+        }
+
+        synchronized (room) {
+            room.setAnime(anime);
+            room.markAnimeUsed(anime.getId());
+            room.setState(GameState.ROUND_ACTIVE);
+            room.setRoundStartMillis(System.currentTimeMillis());
+            room.clearGuessed();
+        }
+        broadcast(room, roundStartPayload(room, room.getRoundSeconds()));
+        ScheduledFuture<?> task = scheduler.schedule(
+            () -> endRound(room), room.getRoundSeconds(), TimeUnit.SECONDS);
+        room.setRoundTask(task);
     }
 
     // Reveal the answer, then advance after a pause so players can read it.
@@ -285,7 +306,7 @@ public class GameManager {
         payload.put("type", "ROUND_START");
         payload.put("round", room.getRound());
         payload.put("totalRounds", room.getTotalRounds());
-        payload.put("imageUrl", room.getAnime().getUrl());
+        payload.put("imageUrl", "/image/" + room.getAnime().getId());
         payload.put("roundSeconds", room.getRoundSeconds());
         payload.put("secondsLeft", secondsLeft);
         return payload;
