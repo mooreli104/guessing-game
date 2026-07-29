@@ -4,19 +4,28 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Anime {
+    private int id;
     private String url;
     private List<String> titles;
 
     public Anime(){
+        this.id = 0;
         this.url = "";
         this.titles = new ArrayList<>();
     }
 
     public Anime(String url, List<String> titles) {
+        this(0, url, titles);
+    }
+
+    public Anime(int id, String url, List<String> titles) {
+        this.id = id;
         this.url = url;
         this.titles = titles;
     }
 
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
     public String getUrl() { return url; }
     public List<String> getTitles() { return titles; }
 
