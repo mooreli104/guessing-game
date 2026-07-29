@@ -15,6 +15,17 @@ public class MalClient {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
+    // Read from the environment the way Db reads DATABASE_URL, so a deployment can
+    // supply its own. Falls back to the original value so nothing breaks if it's unset.
+    private static final String CLIENT_ID = clientId();
+
+    private static String clientId() {
+        String fromEnv = System.getenv("MAL_CLIENT_ID");
+        return (fromEnv == null || fromEnv.isBlank())
+            ? "56c16cf022ffb0fe939e03a8a7c40f5b"
+            : fromEnv;
+    }
+
     public static HttpResponse.BodyHandler<List<Anime>> responseBodyHandler(){
         return responseInfo -> HttpResponse.BodySubscribers.mapping(
             HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8),
@@ -71,7 +82,7 @@ public class MalClient {
             .uri(URI.create("https://api.myanimelist.net/v2/anime/ranking?ranking_type=all"
                 + "&limit=" + limit + "&offset=" + offset
                 + "&fields=alternative_titles,main_picture"))
-            .header("X-MAL-CLIENT-ID", "56c16cf022ffb0fe939e03a8a7c40f5b")
+            .header("X-MAL-CLIENT-ID", CLIENT_ID)
             .build();
 
         return client.send(request, responseBodyHandler()).body();
