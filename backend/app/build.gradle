@@ -42,6 +42,13 @@ application {
     mainClass = 'org.aniguessr.App'
 }
 
+tasks.register('ingest', JavaExec) {
+    group = 'application'
+    description = 'Download, scrub and store the anime pool'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.aniguessr.IngestMain'
+}
+
 tasks.named('test') {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
