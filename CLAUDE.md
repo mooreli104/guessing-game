@@ -179,19 +179,49 @@ Two things are worth knowing before changing this:
    logotypes, often light-on-light over busy artwork. Tesseract found *no* text on real
    covers, so it blanked random artwork and passed the leak through. The current code
    uses EasyOCR's CRAFT scene-text detector instead, which takes the accept rate from
-   ~21% to ~80%.
+   ~21% to ~87% (436 of 500). Note that is the *accept* rate — it says nothing about
+   whether the accepted covers are clean; see the defect section below.
 2. **Only detection is used, never recognition.** We need to know where text is, not what
    it says. So the verify step re-runs *detection* on the scrubbed image and rejects if
-   any region survives — a check that does not depend on the title being legible. A
-   recognition-based verify cannot catch the failure that actually happens.
+   any region survives — a check that does not depend on the title being legible.
 
 Rejection rules: zero detections (means detection failed, not that the cover is clean),
 boxed area over 35% (too little picture left to guess from), or any text surviving the
 verify pass.
 
-**Known limitation:** CRAFT does not detect vertical CJK text, so a cover whose title
-runs vertically could still pass. Rotating 90° and re-detecting was tried and did not
-find it either.
+### The scrubber leaks on roughly a third of covers
+
+**This is a known, unfixed defect. Do not describe the pool as clean.** Of 9 covers
+sampled from the deployed pool, 3 still showed a readable title:
+
+- *The First Slam Dunk* — the giant background letters spelling SLAM DUNK are untouched;
+  only the jersey numbers were boxed.
+- *Major S2* — the メジャー/MAJOR logo is fully visible; only a scoreboard was boxed.
+- *Kingdom 2nd Season* — キングダム is legible.
+
+A further group (*Yuru Camp△*, *Kino no Tabi*) keeps single-character fragments, which is
+probably not enough to guess from.
+
+**Why the verify step cannot catch it.** CRAFT is blind to stylised display logotypes —
+running detection on those three *scrubbed* covers returns **zero** boxes at every scale
+from 1.0 down to 0.25, even with SLAM DUNK spanning the whole frame. The verify pass
+re-runs the same detector, so it can only ever see what the detector already sees; a blind
+spot is invisible to it. This is structurally the same mistake as the Tesseract version —
+the detector was replaced, but the verify built on top of it was not.
+
+The "zero detections ⇒ reject" rule was meant to cover this and does not: it catches
+*total* blindness only. On these covers CRAFT found the jersey numbers and the copyright
+line, so the image cleared the check while the title was never touched.
+
+Ruled out by measurement, so do not retry them:
+
+- **Multi-scale detection.** Tested at 1.0/0.75/0.5/0.35/0.25 — still zero detections. The
+  logotypes are not missed because they are too large.
+- **Rotating 90° for vertical CJK.** Tried; did not find it either. (Vertical *taglines*
+  do survive on some covers, but a tagline is not the answer.)
+
+Anything that actually fixes this needs a verifier that does not depend on CRAFT's
+recall — a different detector, or a vision model that can read logotypes.
 
 Python also decodes the cover, which is why WebP works — about a quarter of MAL's covers
 are WebP and Java's `ImageIO` cannot read them at all.
