@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGame } from "../GameContext";
 
 export default function GameScreen() {
   const { state, send } = useGame();
   const [guess, setGuess] = useState("");
   const [remaining, setRemaining] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Derive the countdown from the server-provided deadline so it stays in sync
   // across re-renders and survives a resume mid-round.
@@ -19,6 +20,13 @@ export default function GameScreen() {
     const id = setInterval(tick, 250);
     return () => clearInterval(id);
   }, [state.roundEndsAt]);
+
+  // Put the cursor back in the box whenever the player is able to guess again. A
+  // disabled input drops focus, and re-enabling it at the start of the next round does
+  // not restore it -- without this the player has to click the box before every guess.
+  useEffect(() => {
+    if (!state.guessed) inputRef.current?.focus();
+  }, [state.round, state.guessed]);
 
   function submitGuess() {
     const value = guess.trim();
@@ -45,6 +53,8 @@ export default function GameScreen() {
 
       <div className="row">
         <input
+          ref={inputRef}
+          autoFocus
           placeholder="Type your guess and press Enter"
           value={guess}
           disabled={state.guessed}
