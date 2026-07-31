@@ -5,13 +5,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project overview
 
 Aniguessr: a multiplayer anime-guessing game. Players join a room via a 4-character
-code, are shown an anime cover image fetched from the MyAnimeList API, and race to
-type the correct title before the round timer runs out. Two independent projects:
+code, are shown an anime cover image with the title scrubbed out of the artwork, and
+race to type the correct title before the round timer runs out. Two independent
+projects:
 
 - `backend/` — Java 21 + Javalin WebSocket/HTTP server (package `org.aniguessr`)
 - `frontend/` — React 19 + TypeScript SPA (Vite)
 
 They communicate over a JSON WebSocket protocol at `ws://localhost:7070/websocket/game`.
+
+Covers are **not** fetched from MyAnimeList during a round. An offline ingest job
+pre-scrubs them into Postgres, and the game serves them from its own
+`GET /image/{id}`, so the round path makes no third-party call and the URL leaks
+nothing about the answer.
 
 ## Commands
 
@@ -23,9 +29,33 @@ They communicate over a JSON WebSocket protocol at `ws://localhost:7070/websocke
 ./gradlew test --tests "org.aniguessr.AnimeTest"                # run one test class
 ./gradlew test --tests "org.aniguessr.AnimeTest.isCorrect_exactMatch"  # run one test method
 ./gradlew run            # start the server on port 7070
+./gradlew ingest         # offline: download, scrub and store the anime pool (~20 min)
 ```
 
 On Windows use `gradlew.bat` instead of `./gradlew`.
+
+### Prerequisites
+
+The game needs a populated database, and ingest additionally needs Python:
+
+| Variable | Needed by | Value |
+|---|---|---|
+| `DATABASE_URL` | server, ingest | `jdbc:postgresql://localhost:5432/aniguessr?user=…&password=…` |
+| `SCRUB_PYTHON` | ingest, `TitleScrubberTest` | path to a Python with `easyocr` installed (defaults to `python`) |
+| `MAL_CLIENT_ID` | ingest | optional; falls back to the value in `MalClient` |
+
+Set up once:
+
+```
+createdb -U postgres aniguessr
+pip install easyocr                 # pulls in torch; ~100MB of model weights on first run
+./gradlew ingest                    # then ./gradlew run as usual
+```
+
+`App.main` throws on startup if `DATABASE_URL` is unset, and `startGame` rejects with
+`ERROR "No anime loaded — run ingest"` if the pool is empty. Tests that need Postgres
+or Python are guarded with `@EnabledIfEnvironmentVariable`, so `./gradlew test` stays
+green without either.
 
 ### Frontend (run from `frontend/`)
 
@@ -71,12 +101,55 @@ with one WebSocket endpoint (`/websocket/game`) and two HTTP endpoints (`/health
   matching for long subtitled titles (e.g. "demon slayer" matches "Demon Slayer:
   Mugen Train" but "mugen train" alone does not). This is the most business-logic-
   heavy class and has the most thorough test coverage (`AnimeTest`).
-- **`MalClient`** fetches a random anime from the MyAnimeList API
-  (`api.myanimelist.net/v2/anime/ranking`) using a random ranking offset, returning
-  a `CompletableFuture<HttpResponse<Anime>>`. The MAL client ID is currently a
-  hardcoded header value in this file.
+- **`AnimeRepository`** is the interface both the game and ingest talk to
+  (`save` / `randomExcluding` / `imageBytes` / `existingIds` / `count`).
+  `PostgresAnimeRepository` implements it with plain JDBC; `FakeAnimeRepository` in the
+  test source set is the in-memory double, mirroring the `SessionSender` /
+  `RecordingSender` split. `Db` owns the JDBC URL and creates the table.
+  `randomExcluding` deliberately does not select the image column — starting a round
+  should move a few hundred bytes, with the picture travelling separately through
+  `GET /image/{id}`.
+- **`MalClient`** is used **only by ingest**, never in the round path. `fetchPage(offset,
+  limit)` reads a page of the MAL ranking synchronously. The client ID comes from
+  `MAL_CLIENT_ID`, falling back to a hardcoded value.
 - Round timing (`ROUND_ACTIVE` duration, the post-answer reveal pause) is driven by
   a shared `ScheduledExecutorService` in `GameManager`, not per-room threads.
+- `Room` tracks `usedAnimeIds` so an anime never repeats within a game. `startGame`
+  clears it; if the pool runs dry mid-game `startRound` clears it and retries once,
+  on the grounds that repeats beat a dead round.
+
+### Title scrubbing (ingest only)
+
+Essentially every MAL cover has its title printed into the artwork, which gives the
+answer away. `IngestMain` downloads each cover, blanks the title, and stores the result;
+covers that cannot be scrubbed cleanly are rejected before a player ever sees them.
+
+Detection runs in a **Python sidecar**, `backend/scripts/scrub_service.py`, driven by
+`TitleScrubber` over stdin/stdout with images passed as file paths. The sidecar is
+long-lived because loading the model takes seconds and ingest scrubs hundreds of covers.
+
+Two things are worth knowing before changing this:
+
+1. **Tesseract does not work here and was removed.** Anime titles are stylised display
+   logotypes, often light-on-light over busy artwork. Tesseract found *no* text on real
+   covers, so it blanked random artwork and passed the leak through. The current code
+   uses EasyOCR's CRAFT scene-text detector instead, which takes the accept rate from
+   ~21% to ~80%.
+2. **Only detection is used, never recognition.** We need to know where text is, not what
+   it says. So the verify step re-runs *detection* on the scrubbed image and rejects if
+   any region survives — a check that does not depend on the title being legible. A
+   recognition-based verify cannot catch the failure that actually happens.
+
+Rejection rules: zero detections (means detection failed, not that the cover is clean),
+boxed area over 35% (too little picture left to guess from), or any text surviving the
+verify pass.
+
+**Known limitation:** CRAFT does not detect vertical CJK text, so a cover whose title
+runs vertically could still pass. Rotating 90° and re-detecting was tried and did not
+find it either.
+
+Python also decodes the cover, which is why WebP works — about a quarter of MAL's covers
+are WebP and Java's `ImageIO` cannot read them at all.
 
 ### Reconnect handling (RESUME)
 
@@ -116,6 +189,9 @@ equivalent of a single `handleMessage` dispatcher. There is one WebSocket connec
 per app lifetime, opened in a `useEffect` in `GameProvider`; messages sent before the
 socket is open are queued in `outboxRef` and flushed on `onopen`.
 
+- `GameContext.tsx` defines `API_URL` beside `WS_URL` and prefixes the server-sent
+  `imageUrl` (a bare `/image/{id}` path) with it, so `<img src>` resolves against the
+  backend rather than the Vite dev server.
 - `playerId` and room `code` are persisted to `sessionStorage` so a page refresh can
   RESUME instead of dropping the player from their room (see backend RESUME above).
   An `ERROR` message containing "expired" clears `sessionStorage` and resets to the

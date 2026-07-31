@@ -19,6 +19,8 @@ public class Room {
     private long roundStartMillis;
     private Anime anime;
     private final Set<String> guessedCorrectly;
+    // Anime already shown this game, so a round never repeats one.
+    private final Set<Integer> usedAnimeIds;
     private ScheduledFuture<?> roundTask;
 
     public Room() {
@@ -32,6 +34,7 @@ public class Room {
         this.roundStartMillis = 0;
         this.anime = new Anime();
         this.guessedCorrectly = new HashSet<>();
+        this.usedAnimeIds = new HashSet<>();
     }
 
     public String getId() { return id; }
@@ -55,6 +58,10 @@ public class Room {
     public boolean hasGuessed(String playerId) { return guessedCorrectly.contains(playerId); }
     public void markGuessed(String playerId) { guessedCorrectly.add(playerId); }
     public void clearGuessed() { guessedCorrectly.clear(); }
+
+    public Set<Integer> getUsedAnimeIds() { return Set.copyOf(usedAnimeIds); }
+    public void markAnimeUsed(int id) { usedAnimeIds.add(id); }
+    public void clearUsedAnime() { usedAnimeIds.clear(); }
 
     public ScheduledFuture<?> getRoundTask() { return roundTask; }
     public void setRoundTask(ScheduledFuture<?> roundTask) { this.roundTask = roundTask; }

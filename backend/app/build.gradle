@@ -26,6 +26,7 @@ dependencies {
     implementation 'io.javalin:javalin:7.1.0'
     implementation 'com.google.code.gson:gson:2.7'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
+    implementation 'org.postgresql:postgresql:42.7.4'
 
 }
 
@@ -39,6 +40,13 @@ java {
 application {
     // Define the main class for the application.
     mainClass = 'org.aniguessr.App'
+}
+
+tasks.register('ingest', JavaExec) {
+    group = 'application'
+    description = 'Download, scrub and store the anime pool'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.aniguessr.IngestMain'
 }
 
 tasks.named('test') {

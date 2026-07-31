@@ -105,4 +105,15 @@ class AnimeTest {
     void isCorrect_withNoTitles_isFalse() {
         assertFalse(new Anime().isCorrect("anything"));
     }
+
+    @Test
+    void id_defaultsToZeroAndRoundTrips() {
+        Anime blank = new Anime();
+        assertEquals(0, blank.getId());
+
+        Anime withId = new Anime(5114, "img", List.of("Fullmetal Alchemist: Brotherhood"));
+        assertEquals(5114, withId.getId());
+        assertEquals("img", withId.getUrl());
+        assertTrue(withId.isCorrect("fullmetal alchemist"));
+    }
 }
