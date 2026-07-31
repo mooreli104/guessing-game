@@ -9,10 +9,15 @@ import {
 } from "react";
 import type { ClientMsg, Players, ServerMsg } from "./types";
 
-const WS_URL = "ws://localhost:7070/websocket/game";
+// In production the backend serves this bundle, so it is simply wherever the page came
+// from. In dev the Vite server is a different origin, so point at the backend's port.
+// Deriving from location rather than hardcoding is what makes the deployed game work:
+// a page served over https must use wss, and browsers block a plain ws:// from it.
+const API_URL = import.meta.env.DEV ? "http://localhost:7070" : window.location.origin;
+
 // Round images are served by the backend, not the Vite dev server, so the
 // server-sent "/image/{id}" path has to resolve against this origin.
-const API_URL = "http://localhost:7070";
+const WS_URL = API_URL.replace(/^http/, "ws") + "/websocket/game";
 
 export type Screen = "home" | "lobby" | "game" | "over";
 

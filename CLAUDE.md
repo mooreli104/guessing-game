@@ -41,6 +41,7 @@ The game needs a populated database, and ingest additionally needs Python:
 | Variable | Needed by | Value |
 |---|---|---|
 | `DATABASE_URL` | server, ingest | `jdbc:postgresql://localhost:5432/aniguessr?user=…&password=…` |
+| `TEST_DATABASE_URL` | `AnimeRepositoryTest` | a **different** database — these tests truncate it |
 | `SCRUB_PYTHON` | ingest, `TitleScrubberTest` | path to a Python with `easyocr` installed (defaults to `python`) |
 | `MAL_CLIENT_ID` | ingest | optional; falls back to the value in `MalClient` |
 
@@ -48,6 +49,7 @@ Set up once:
 
 ```
 createdb -U postgres aniguessr
+createdb -U postgres aniguessr_test   # AnimeRepositoryTest truncates this one
 pip install easyocr                 # pulls in torch; ~100MB of model weights on first run
 ./gradlew ingest                    # then ./gradlew run as usual
 ```
@@ -56,6 +58,11 @@ pip install easyocr                 # pulls in torch; ~100MB of model weights on
 `ERROR "No anime loaded — run ingest"` if the pool is empty. Tests that need Postgres
 or Python are guarded with `@EnabledIfEnvironmentVariable`, so `./gradlew test` stays
 green without either.
+
+**`TEST_DATABASE_URL` is deliberately a separate variable from `DATABASE_URL`.**
+`AnimeRepositoryTest` truncates the anime table; when it was guarded on `DATABASE_URL`,
+running the suite wiped the ingested pool, and against a deployed database it would wipe
+production. The test refuses to run if the two point at the same database.
 
 ### Frontend (run from `frontend/`)
 
@@ -67,6 +74,44 @@ npm run preview    # preview the production build
 ```
 
 There is no frontend test runner configured.
+
+## Deployment
+
+The `Dockerfile` at the repo root builds **one image containing both halves**: it builds
+the frontend, copies the bundle onto the backend's classpath at `/public`, and ships a JRE
+plus the installed distribution. `App` serves that bundle as static files, so the game is a
+single process on a single origin.
+
+That single origin is load-bearing, not a convenience:
+
+- There is no CORS to configure.
+- The client derives `API_URL` from `window.location.origin` and the WebSocket URL from it
+  (`http`→`ws`), so a page served over HTTPS automatically gets `wss://`. Browsers block a
+  plain `ws://` from an HTTPS page, so a hardcoded `ws://localhost` cannot work deployed.
+- `import.meta.env.DEV` keeps the `localhost:7070` branch for `npm run dev` only; it is
+  tree-shaken out of the production bundle.
+
+**Ingest is deliberately not in the image.** It needs Python, easyocr and ~2GB of torch
+weights, and only ever runs offline. Run it locally and move the rows with `pg_dump` /
+`psql`; the deployed image is just a JRE and a jar (~480MB).
+
+`Db.toJdbcUrl` accepts either a JDBC URL or the `postgres://user:pass@host/db` form that
+hosting platforms inject, so `DATABASE_URL` can be wired straight from the platform's
+Postgres. TLS is required for remote hosts and disabled for `localhost` and
+`*.railway.internal`, which serve no certificate.
+
+`PORT` is read from the environment (7070 when unset) and the server binds `0.0.0.0` —
+binding loopback would make it unreachable from outside the container.
+
+### One instance only
+
+`GameManager` holds rooms, players and session mappings in memory. Two instances means two
+players can land on different JVMs and never share a room, and sticky sessions do not help
+because the room itself only exists in one heap. **Pin the deployment to a single
+instance.** Horizontal scaling would require moving room state to something shared.
+
+Related: avoid a free tier that sleeps on idle. Spin-down drops every open WebSocket and
+kills in-flight games.
 
 ## Git workflow
 
@@ -134,19 +179,49 @@ Two things are worth knowing before changing this:
    logotypes, often light-on-light over busy artwork. Tesseract found *no* text on real
    covers, so it blanked random artwork and passed the leak through. The current code
    uses EasyOCR's CRAFT scene-text detector instead, which takes the accept rate from
-   ~21% to ~80%.
+   ~21% to ~87% (436 of 500). Note that is the *accept* rate — it says nothing about
+   whether the accepted covers are clean; see the defect section below.
 2. **Only detection is used, never recognition.** We need to know where text is, not what
    it says. So the verify step re-runs *detection* on the scrubbed image and rejects if
-   any region survives — a check that does not depend on the title being legible. A
-   recognition-based verify cannot catch the failure that actually happens.
+   any region survives — a check that does not depend on the title being legible.
 
 Rejection rules: zero detections (means detection failed, not that the cover is clean),
 boxed area over 35% (too little picture left to guess from), or any text surviving the
 verify pass.
 
-**Known limitation:** CRAFT does not detect vertical CJK text, so a cover whose title
-runs vertically could still pass. Rotating 90° and re-detecting was tried and did not
-find it either.
+### The scrubber leaks on roughly a third of covers
+
+**This is a known, unfixed defect. Do not describe the pool as clean.** Of 9 covers
+sampled from the deployed pool, 3 still showed a readable title:
+
+- *The First Slam Dunk* — the giant background letters spelling SLAM DUNK are untouched;
+  only the jersey numbers were boxed.
+- *Major S2* — the メジャー/MAJOR logo is fully visible; only a scoreboard was boxed.
+- *Kingdom 2nd Season* — キングダム is legible.
+
+A further group (*Yuru Camp△*, *Kino no Tabi*) keeps single-character fragments, which is
+probably not enough to guess from.
+
+**Why the verify step cannot catch it.** CRAFT is blind to stylised display logotypes —
+running detection on those three *scrubbed* covers returns **zero** boxes at every scale
+from 1.0 down to 0.25, even with SLAM DUNK spanning the whole frame. The verify pass
+re-runs the same detector, so it can only ever see what the detector already sees; a blind
+spot is invisible to it. This is structurally the same mistake as the Tesseract version —
+the detector was replaced, but the verify built on top of it was not.
+
+The "zero detections ⇒ reject" rule was meant to cover this and does not: it catches
+*total* blindness only. On these covers CRAFT found the jersey numbers and the copyright
+line, so the image cleared the check while the title was never touched.
+
+Ruled out by measurement, so do not retry them:
+
+- **Multi-scale detection.** Tested at 1.0/0.75/0.5/0.35/0.25 — still zero detections. The
+  logotypes are not missed because they are too large.
+- **Rotating 90° for vertical CJK.** Tried; did not find it either. (Vertical *taglines*
+  do survive on some covers, but a tagline is not the answer.)
+
+Anything that actually fixes this needs a verifier that does not depend on CRAFT's
+recall — a different detector, or a vision model that can read logotypes.
 
 Python also decodes the cover, which is why WebP works — about a quarter of MAL's covers
 are WebP and Java's `ImageIO` cannot read them at all.

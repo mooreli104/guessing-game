@@ -12,17 +12,33 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 /**
- * Exercises the real Postgres implementation. Skipped when DATABASE_URL is unset so
+ * Exercises the real Postgres implementation. Skipped when TEST_DATABASE_URL is unset so
  * `gradlew test` stays green on a machine without a database.
+ *
+ * Deliberately reads TEST_DATABASE_URL rather than the DATABASE_URL the application uses:
+ * setUp truncates the anime table, and an earlier version of this class guarded on
+ * DATABASE_URL, so running the suite on a developer machine destroyed the ingested pool.
+ * The same mistake against a deployed database would destroy production. A separate
+ * variable means the app's database is never the one at risk.
  */
-@EnabledIfEnvironmentVariable(named = "DATABASE_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "TEST_DATABASE_URL", matches = ".+")
 class AnimeRepositoryTest {
 
     private PostgresAnimeRepository repo;
 
     @BeforeEach
     void setUp() throws Exception {
-        Db db = new Db();
+        String testUrl = System.getenv("TEST_DATABASE_URL");
+        // Belt and braces: even if someone points both variables at one database, refuse
+        // to truncate it rather than silently wiping the pool.
+        String appUrl = System.getenv("DATABASE_URL");
+        if (testUrl.equals(appUrl)) {
+            throw new IllegalStateException(
+                "TEST_DATABASE_URL must not be the same database as DATABASE_URL -- "
+                    + "these tests truncate the anime table");
+        }
+
+        Db db = new Db(testUrl);
         db.createTable();
         try (var conn = db.connection(); var st = conn.createStatement()) {
             st.execute("TRUNCATE anime");

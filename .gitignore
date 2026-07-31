@@ -11,3 +11,9 @@ build
 
 devlog.md
 *.class
+
+# Frontend build output, and the copy of it the backend serves. Both are generated --
+# the Dockerfile builds the frontend and copies it onto the backend's classpath.
+node_modules
+frontend/dist
+backend/app/src/main/resources/public
