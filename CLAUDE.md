@@ -75,6 +75,44 @@ npm run preview    # preview the production build
 
 There is no frontend test runner configured.
 
+## Deployment
+
+The `Dockerfile` at the repo root builds **one image containing both halves**: it builds
+the frontend, copies the bundle onto the backend's classpath at `/public`, and ships a JRE
+plus the installed distribution. `App` serves that bundle as static files, so the game is a
+single process on a single origin.
+
+That single origin is load-bearing, not a convenience:
+
+- There is no CORS to configure.
+- The client derives `API_URL` from `window.location.origin` and the WebSocket URL from it
+  (`http`→`ws`), so a page served over HTTPS automatically gets `wss://`. Browsers block a
+  plain `ws://` from an HTTPS page, so a hardcoded `ws://localhost` cannot work deployed.
+- `import.meta.env.DEV` keeps the `localhost:7070` branch for `npm run dev` only; it is
+  tree-shaken out of the production bundle.
+
+**Ingest is deliberately not in the image.** It needs Python, easyocr and ~2GB of torch
+weights, and only ever runs offline. Run it locally and move the rows with `pg_dump` /
+`psql`; the deployed image is just a JRE and a jar (~480MB).
+
+`Db.toJdbcUrl` accepts either a JDBC URL or the `postgres://user:pass@host/db` form that
+hosting platforms inject, so `DATABASE_URL` can be wired straight from the platform's
+Postgres. TLS is required for remote hosts and disabled for `localhost` and
+`*.railway.internal`, which serve no certificate.
+
+`PORT` is read from the environment (7070 when unset) and the server binds `0.0.0.0` —
+binding loopback would make it unreachable from outside the container.
+
+### One instance only
+
+`GameManager` holds rooms, players and session mappings in memory. Two instances means two
+players can land on different JVMs and never share a room, and sticky sessions do not help
+because the room itself only exists in one heap. **Pin the deployment to a single
+instance.** Horizontal scaling would require moving room state to something shared.
+
+Related: avoid a free tier that sleeps on idle. Spin-down drops every open WebSocket and
+kills in-flight games.
+
 ## Git workflow
 
 Commit on every branch, and commit incrementally per feature rather than batching
