@@ -41,6 +41,7 @@ The game needs a populated database, and ingest additionally needs Python:
 | Variable | Needed by | Value |
 |---|---|---|
 | `DATABASE_URL` | server, ingest | `jdbc:postgresql://localhost:5432/aniguessr?user=…&password=…` |
+| `TEST_DATABASE_URL` | `AnimeRepositoryTest` | a **different** database — these tests truncate it |
 | `SCRUB_PYTHON` | ingest, `TitleScrubberTest` | path to a Python with `easyocr` installed (defaults to `python`) |
 | `MAL_CLIENT_ID` | ingest | optional; falls back to the value in `MalClient` |
 
@@ -48,6 +49,7 @@ Set up once:
 
 ```
 createdb -U postgres aniguessr
+createdb -U postgres aniguessr_test   # AnimeRepositoryTest truncates this one
 pip install easyocr                 # pulls in torch; ~100MB of model weights on first run
 ./gradlew ingest                    # then ./gradlew run as usual
 ```
@@ -56,6 +58,11 @@ pip install easyocr                 # pulls in torch; ~100MB of model weights on
 `ERROR "No anime loaded — run ingest"` if the pool is empty. Tests that need Postgres
 or Python are guarded with `@EnabledIfEnvironmentVariable`, so `./gradlew test` stays
 green without either.
+
+**`TEST_DATABASE_URL` is deliberately a separate variable from `DATABASE_URL`.**
+`AnimeRepositoryTest` truncates the anime table; when it was guarded on `DATABASE_URL`,
+running the suite wiped the ingested pool, and against a deployed database it would wipe
+production. The test refuses to run if the two point at the same database.
 
 ### Frontend (run from `frontend/`)
 
