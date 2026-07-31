@@ -23,8 +23,21 @@ import java.util.Set;
  */
 public class IngestMain {
 
-    private static final int POOL_SIZE = 500;
+    /**
+     * How far down the MAL ranking to go. Override with INGEST_POOL_SIZE to grow the
+     * catalogue -- a re-run skips everything already stored, so raising this and running
+     * again only fetches the new entries.
+     */
+    private static final int POOL_SIZE = poolSize();
     private static final int PAGE_SIZE = 100;
+
+    private static int poolSize() {
+        String fromEnv = System.getenv("INGEST_POOL_SIZE");
+        if (fromEnv == null || fromEnv.isBlank()) {
+            return 2000;
+        }
+        return Integer.parseInt(fromEnv.trim());
+    }
 
     public static void main(String[] args) throws Exception {
         AnimeRepository repository = new PostgresAnimeRepository(new Db());
