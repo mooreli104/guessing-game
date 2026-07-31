@@ -1,0 +1,15 @@
+# Build outputs and caches -- the image rebuilds these from source.
+**/node_modules
+**/dist
+**/build
+**/.gradle
+backend/app/src/main/resources/public
+
+# Never ship the ingest tooling or its model weights; ingest runs offline.
+backend/scripts
+
+# Local noise
+.git
+.vscode
+docs
+**/*.log
