@@ -26,7 +26,11 @@ public class App {
             // and, had it serialised, would have published Room.getAnime() -- the current
             // answer -- to anyone who polled it. getAllRoomsSnapshot stays for the tests.
             config.routes.get("/image/{id}", ctx -> {
-                byte[] bytes = repository.imageBytes(Integer.parseInt(ctx.pathParam("id")));
+                // The id comes straight off the URL, so it is whatever the caller typed.
+                // Anything that is not an anime id is simply not found -- letting
+                // parseInt throw would answer a malformed URL with a 500.
+                Integer id = parseId(ctx.pathParam("id"));
+                byte[] bytes = id == null ? null : repository.imageBytes(id);
                 if (bytes == null) {
                     ctx.status(404);
                     return;
@@ -43,6 +47,18 @@ public class App {
         // Bind every interface: inside a container, binding loopback would make the server
         // unreachable from outside it.
         app.start("0.0.0.0", PORT);
+    }
+
+    /** The id from a path segment, or null when it is not a number we could look up. */
+    static Integer parseId(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(raw);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static int port() {
