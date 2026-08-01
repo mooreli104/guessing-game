@@ -21,7 +21,10 @@ public class App {
             // once the platform terminates TLS.
             config.staticFiles.add("/public", Location.CLASSPATH);
             config.routes.get("/health", ctx -> ctx.status(200).json(Map.of("status", "running")));
-            config.routes.get("/rooms", ctx -> ctx.json(router.getGameManager().getAllRoomsSnapshot()));
+            // There is deliberately no /rooms route. It serialised Room objects directly,
+            // which meant it returned 500 during a round (a Room holds a ScheduledFuture)
+            // and, had it serialised, would have published Room.getAnime() -- the current
+            // answer -- to anyone who polled it. getAllRoomsSnapshot stays for the tests.
             config.routes.get("/image/{id}", ctx -> {
                 byte[] bytes = repository.imageBytes(Integer.parseInt(ctx.pathParam("id")));
                 if (bytes == null) {
