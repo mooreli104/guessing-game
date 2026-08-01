@@ -123,9 +123,15 @@ feature or fix.
 
 ### Backend: session/player/room model
 
-The server is single-process, in-memory, no database. `App.java` wires up Javalin
-with one WebSocket endpoint (`/websocket/game`) and two HTTP endpoints (`/health`,
-`/rooms`). All game logic flows through `WsRouter` → `GameManager`.
+The server is single-process and holds all *game* state in memory; the anime pool lives
+in Postgres. `App.java` wires up Javalin with one WebSocket endpoint (`/websocket/game`)
+and two HTTP endpoints (`/health`, `/image/{id}`), plus the static frontend. All game
+logic flows through `WsRouter` → `GameManager`.
+
+**There is deliberately no `/rooms` route.** It serialised `Room` objects straight to
+JSON, so it returned 500 during any round (a `Room` holds a `ScheduledFuture`) and, had
+it serialised, would have published `Room.getAnime()` — the current answer — to anyone
+who polled it. `getAllRoomsSnapshot()` remains as a test accessor.
 
 - **`WsRouter`** is the WebSocket entry point. It deserializes incoming JSON into a
   `type`-tagged message, dispatches to the matching `GameManager` method, and
