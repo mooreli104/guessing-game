@@ -28,6 +28,11 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
     implementation 'org.postgresql:postgresql:42.7.4'
 
+    // Javalin logs through SLF4J. Without a provider on the classpath SLF4J binds to a
+    // no-op, so startup problems and request exceptions vanish silently -- which is how a
+    // 500 from the old /rooms route reached production undiagnosed. runtimeOnly because
+    // nothing compiles against it; the version tracks the slf4j-api Javalin pulls in.
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.17'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
