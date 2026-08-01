@@ -1,6 +1,7 @@
 package org.aniguessr;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -72,6 +73,30 @@ class DbTest {
     void missingPort_defaultsTo5432() {
         String jdbc = Db.toJdbcUrl("postgres://bob:pw@db.example.com/railway");
         assertTrue(jdbc.startsWith("jdbc:postgresql://db.example.com:5432/railway?"), jdbc);
+    }
+
+    @Test
+    void credentials_areKeptOutOfTheUrlUsedToConnect() {
+        // connection() presents these as driver properties instead. A password embedded in
+        // the URL rides along into any exception or log line that echoes the URL back.
+        Db.Target target = Db.parse("postgres://bob:hunter2@db.example.com:5432/railway");
+
+        assertFalse(target.url().contains("hunter2"), target.url());
+        assertFalse(target.url().contains("bob"), target.url());
+        assertEquals("bob", target.user());
+        assertEquals("hunter2", target.password());
+        assertTrue(target.url().contains("sslmode=require"), target.url());
+    }
+
+    @Test
+    void jdbcUrl_keepsItsOwnCredentials() {
+        // The locally-written form puts them in the query string; leave it exactly alone.
+        String url = "jdbc:postgresql://localhost:5432/aniguessr?user=postgres&password=secret";
+        Db.Target target = Db.parse(url);
+
+        assertEquals(url, target.url());
+        assertEquals("", target.user());
+        assertEquals("", target.password());
     }
 
     @Test

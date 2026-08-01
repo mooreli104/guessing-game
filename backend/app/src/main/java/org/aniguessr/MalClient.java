@@ -15,15 +15,20 @@ public class MalClient {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    // Read from the environment the way Db reads DATABASE_URL, so a deployment can
-    // supply its own. Falls back to the original value so nothing breaks if it's unset.
-    private static final String CLIENT_ID = clientId();
-
+    /**
+     * Read from the environment the way Db reads DATABASE_URL. There used to be a
+     * hardcoded client ID here as a fallback, which meant a credential sat in the source
+     * and in git history. Ingest is an offline batch job run by hand, so requiring the
+     * variable costs nothing and failing loudly beats quietly using someone else's key.
+     */
     private static String clientId() {
         String fromEnv = System.getenv("MAL_CLIENT_ID");
-        return (fromEnv == null || fromEnv.isBlank())
-            ? "56c16cf022ffb0fe939e03a8a7c40f5b"
-            : fromEnv;
+        if (fromEnv == null || fromEnv.isBlank()) {
+            throw new IllegalStateException(
+                "MAL_CLIENT_ID is not set. Register an application at "
+                    + "https://myanimelist.net/apiconfig and export its client ID.");
+        }
+        return fromEnv;
     }
 
     public static HttpResponse.BodyHandler<List<Anime>> responseBodyHandler(){
@@ -37,8 +42,8 @@ public class MalClient {
                     for (JsonNode entry : root.get("data")) {
                         JsonNode node = entry.get("node");
 
-                        // Ask for the large picture: Tesseract reads bigger text far more
-                        // accurately, and it displays better too.
+                        // Ask for the large picture: the scrubber's detector locates text
+                        // far more reliably on it, and it displays better too.
                         JsonNode picture = node.get("main_picture");
                         if (picture == null || picture.get("large") == null) continue;
                         String url = picture.get("large").asText();
@@ -82,7 +87,7 @@ public class MalClient {
             .uri(URI.create("https://api.myanimelist.net/v2/anime/ranking?ranking_type=all"
                 + "&limit=" + limit + "&offset=" + offset
                 + "&fields=alternative_titles,main_picture"))
-            .header("X-MAL-CLIENT-ID", CLIENT_ID)
+            .header("X-MAL-CLIENT-ID", clientId())
             .build();
 
         return client.send(request, responseBodyHandler()).body();
