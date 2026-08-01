@@ -16,8 +16,11 @@ They communicate over a JSON WebSocket protocol at `ws://localhost:7070/websocke
 
 Covers are **not** fetched from MyAnimeList during a round. An offline ingest job
 pre-scrubs them into Postgres, and the game serves them from its own
-`GET /image/{id}`, so the round path makes no third-party call and the URL leaks
-nothing about the answer.
+`GET /image/{token}`, so the round path makes no third-party call.
+
+`{token}` is an opaque per-round handle, **never the anime id** — the anime id is
+MyAnimeList's own, so `/image/5114` used to hand the answer to anyone who opened the
+network tab. See "Image tokens" below before changing that route.
 
 ## Commands
 
@@ -43,7 +46,7 @@ The game needs a populated database, and ingest additionally needs Python:
 | `DATABASE_URL` | server, ingest | `jdbc:postgresql://localhost:5432/aniguessr?user=…&password=…` |
 | `TEST_DATABASE_URL` | `AnimeRepositoryTest` | a **different** database — these tests truncate it |
 | `SCRUB_PYTHON` | ingest, `TitleScrubberTest` | path to a Python with `easyocr` installed (defaults to `python`) |
-| `MAL_CLIENT_ID` | ingest | optional; falls back to the value in `MalClient` |
+| `MAL_CLIENT_ID` | ingest | **required** by ingest; register an app at myanimelist.net/apiconfig |
 
 Set up once:
 
@@ -95,10 +98,11 @@ That single origin is load-bearing, not a convenience:
 weights, and only ever runs offline. Run it locally and move the rows with `pg_dump` /
 `psql`; the deployed image is just a JRE and a jar (~480MB).
 
-`Db.toJdbcUrl` accepts either a JDBC URL or the `postgres://user:pass@host/db` form that
+`Db.parse` accepts either a JDBC URL or the `postgres://user:pass@host/db` form that
 hosting platforms inject, so `DATABASE_URL` can be wired straight from the platform's
 Postgres. TLS is required for remote hosts and disabled for `localhost` and
-`*.railway.internal`, which serve no certificate.
+`*.railway.internal`, which serve no certificate. Credentials from the `postgres://` form
+are passed to the driver as properties rather than left in the URL.
 
 `PORT` is read from the environment (7070 when unset) and the server binds `0.0.0.0` —
 binding loopback would make it unreachable from outside the container.
@@ -113,6 +117,55 @@ instance.** Horizontal scaling would require moving room state to something shar
 Related: avoid a free tier that sleeps on idle. Spin-down drops every open WebSocket and
 kills in-flight games.
 
+## Security notes
+
+Deliberate, and worth keeping that way:
+
+- Every SQL statement is parameterized; no query is built by string concatenation.
+- `Db.parse` splits the credentials out of the platform-injected
+  `postgres://user:pass@host/db` URL and `connection()` presents them as driver
+  properties, so the password is not in the URL the driver may echo back in an error.
+  `Db.toJdbcUrl` still returns the combined form (percent-encoded, so a `&` or `=` in a
+  password cannot split the query string) because that is what a developer pastes to
+  connect by hand.
+- `AnimeRepositoryTest` refuses to run when `TEST_DATABASE_URL` and `DATABASE_URL` name
+  the same database — it truncates the anime table.
+- Room codes come from `SecureRandom`, not `Math.random()`; four characters over a
+  36-character alphabet is short enough to be worth guessing.
+- `MAL_CLIENT_ID` is required, with no fallback. A hardcoded client ID used to live in
+  `MalClient` as the default, which put a credential in the source and in git history.
+  Ingest is an offline job run by hand, so demanding the variable costs nothing.
+- Usernames are trimmed and capped at 16 characters **server-side** in
+  `GameManager.displayName`. `maxLength` in `HomeScreen` is a convenience, not a control:
+  the name is broadcast to every other player in the room.
+- Nothing renders user text as HTML, so unvalidated names were never an XSS route; the
+  cap is about what other players are made to look at.
+
+Still open:
+
+- **`JOIN_ROOM` is unthrottled**, so room codes remain brute-forceable given enough
+  attempts even though they are now unpredictable. A rate limit per session is the fix if
+  this ever matters.
+- **No connection pool.** Each round opens a couple of fresh `DriverManager` connections.
+  Fine at party-game scale; see the concurrency section for why it is worth knowing about.
+- **The static file handler sets no security headers** (CSP and friends).
+
+## Recurring duplication
+
+These were collapsed once; extend the shared version rather than adding a second copy:
+
+- `GameManager.register` is what `createRoom` and `joinRoom` have in common — build the
+  player, seat them, broadcast, and catch them up on any round in progress.
+- `GameManager.roomFor(sessionId)` walks `sessionId → playerId → Player → Room` and sends
+  the `NOT_IN_ROOM` error. `guess` and `startGame` both go through it.
+- `WsRouter.joinedPayload` builds `ROOM_CREATED` and `ROOM_JOINED`, which differ only by
+  their type string.
+
+Still hand-rolled in four places: "read an env var, fall back to a default" —
+`App.port`, `IngestMain.poolSize`, `MalClient.clientId`, and `SCRUB_PYTHON` in
+`TitleScrubber`. Small enough that a shared helper has not earned its keep, but a fifth
+would change that.
+
 ## Git workflow
 
 Commit on every branch, and commit incrementally per feature rather than batching
@@ -125,7 +178,7 @@ feature or fix.
 
 The server is single-process and holds all *game* state in memory; the anime pool lives
 in Postgres. `App.java` wires up Javalin with one WebSocket endpoint (`/websocket/game`)
-and two HTTP endpoints (`/health`, `/image/{id}`), plus the static frontend. All game
+and two HTTP endpoints (`/health`, `/image/{token}`), plus the static frontend. All game
 logic flows through `WsRouter` → `GameManager`.
 
 **There is deliberately no `/rooms` route.** It serialised `Room` objects straight to
@@ -145,8 +198,9 @@ who polled it. `getAllRoomsSnapshot()` remains as a test accessor.
   round number/timer, and the current `Anime` answer. Mutations to a `Room` are
   guarded by `synchronized (room)` blocks in `GameManager` since multiple
   WebSocket threads can touch the same room concurrently.
-- **`GameState`** is a state machine enum (`LOBBY → ROUND_ACTIVE → ROUND_SCORING →
-  GAME_OVER`, then back to `LOBBY` for replay) via `nextState()`.
+- **`GameState`** enumerates `LOBBY → ROUND_ACTIVE → ROUND_SCORING → GAME_OVER`, then
+  back to `LOBBY` for replay. Plain constants: `GameManager` makes every transition
+  explicitly with `setState(...)`.
 - **`Anime`** wraps the answer title(s) and implements the guess-matching logic:
   Levenshtein distance with a length-scaled typo tolerance, plus base-name/keyword
   matching for long subtitled titles (e.g. "demon slayer" matches "Demon Slayer:
@@ -159,15 +213,56 @@ who polled it. `getAllRoomsSnapshot()` remains as a test accessor.
   `RecordingSender` split. `Db` owns the JDBC URL and creates the table.
   `randomExcluding` deliberately does not select the image column — starting a round
   should move a few hundred bytes, with the picture travelling separately through
-  `GET /image/{id}`.
+  `GET /image/{token}`.
 - **`MalClient`** is used **only by ingest**, never in the round path. `fetchPage(offset,
   limit)` reads a page of the MAL ranking synchronously. The client ID comes from
-  `MAL_CLIENT_ID`, falling back to a hardcoded value.
+  `MAL_CLIENT_ID` and there is no fallback — see Security notes.
 - Round timing (`ROUND_ACTIVE` duration, the post-answer reveal pause) is driven by
   a shared `ScheduledExecutorService` in `GameManager`, not per-room threads.
 - `Room` tracks `usedAnimeIds` so an anime never repeats within a game. `startGame`
   clears it; if the pool runs dry mid-game `startRound` clears it and retries once,
   on the grounds that repeats beat a dead round.
+
+### Concurrency: the room lock
+
+Three thread pools touch a `Room`: Jetty's WebSocket threads (one per incoming message),
+`GameManager`'s scheduler thread, and Javalin's HTTP handlers. `Room`'s fields are not
+synchronized or `volatile` and `connectedPlayers` is a plain `HashMap`, so the invariant
+is that **every read or write of room state happens inside `synchronized (room)` in
+`GameManager`** — which is the only class that touches a `Room`. Accessors that hand out
+collections (`getPlayers`, `getUsedAnimeIds`, `getGuessedCorrectly`) return copies, so a
+caller cannot mutate room state from outside the lock by accident.
+
+The one thing that must never happen inside that block is a repository call. It opens a
+JDBC connection, and holding the room lock across it blocks every guess in that room.
+`startRound` is written around this: it reads `usedAnimeIds` under the lock, runs both
+`randomExcluding` attempts outside it, then takes the lock again to install the result.
+`advanceAfterReveal` sets a `nextRound` flag inside the lock and calls `startRound` after
+releasing it, for the same reason.
+
+Two facts about the scheduler that are easy to trip over:
+
+- It is `Executors.newSingleThreadScheduledExecutor()` — **one thread for every room in
+  the process.** A slow task in one room's transition delays round ends everywhere. This
+  is survivable only because nothing slow runs on it; keep it that way.
+- `App` installs a shutdown hook calling `GameManager.shutdown()`, or the scheduler's
+  non-daemon thread keeps the JVM alive after the server stops.
+
+There is no connection pool (see `Db`'s class comment). Each round opens a couple of
+fresh `DriverManager` connections. Fine at party-game scale, but it is why keeping the
+queries out of the lock matters more than it looks.
+
+### Input from the network is untrusted
+
+`WsRouter.onMessage` reads every field through `text(node, field)` or
+`intOr(node, field, fallback)`, never `node.get(field).asText()`. The direct form threw
+`NullPointerException` out of the handler for any message that simply omitted a field, so
+any client could produce server-side exceptions at will and got no reply explaining why
+nothing happened. Malformed JSON is caught around `readTree` and answered with
+`ERROR BAD_MESSAGE`.
+
+Usernames are bounded in `GameManager.displayName`, not in the browser — see Security
+notes.
 
 ### Title scrubbing (ingest only)
 
@@ -194,6 +289,27 @@ Two things are worth knowing before changing this:
 Rejection rules: zero detections (means detection failed, not that the cover is clean),
 boxed area over 35% (too little picture left to guess from), or any text surviving the
 verify pass.
+
+### Image tokens
+
+Round covers are served from `GET /image/{token}` where the token is a `UUID` minted by
+`GameManager.issueImageToken` at the start of each round, held on the `Room`, and mapped
+back to an anime id through `GameManager.imageTokens`.
+
+**Do not go back to `/image/{animeId}`.** `MalClient` stores MyAnimeList's own id as the
+primary key, so the URL used to be `/image/5114` — and `myanimelist.net/anime/5114` is
+Fullmetal Alchemist: Brotherhood. Right-click, "Copy image address", and the whole
+scrubbing pipeline was moot. The token also stops players enumerating the public MAL id
+space to pre-download and fingerprint the pool.
+
+Tokens are retired when the round they belong to is replaced (`issueImageToken` releases
+the previous one), when the game ends, and when the room empties. A spent or unknown
+token is a 404, which is why the route needs no parsing or validation — there is no
+`parseId` any more and nothing to reject.
+
+Because a token names one fixed image for the life of a round, the route sets
+`Cache-Control: private, max-age=3600, immutable`; the cover was previously re-read from
+Postgres and re-sent on every render.
 
 ### The scrubber leaks on roughly a third of covers
 
@@ -253,6 +369,45 @@ round, from `BASE_POINTS` (1000) down to a floor of `MIN_POINTS` (100) — see
 `GameManager.pointsFor`. If every connected player has guessed correctly, the round
 ends immediately rather than waiting out the timer.
 
+### Round lifecycle invariants
+
+These each fix a bug that was live once. Keep them when editing `GameManager`.
+
+- **`startGame` only runs from `LOBBY`.** Starting mid-game left the running round's
+  timer orphaned; it then fired and cut the new round short, and everyone's scores were
+  reset on the way. The state is checked before the `repository.count()` call and again
+  after, since the lock is released across it. `startRound` also cancels any surviving
+  `roundTask` before installing its own.
+- **`removePlayer` clears the leaver from `guessedCorrectly`.** The early-finish check
+  compares that set's size against the player count, so a departed player left behind in
+  it ended later rounds early. It then re-runs `endRoundIfEveryoneGuessed`, because the
+  player who left may have been the last one everyone was waiting on — otherwise the
+  round sat there running out its clock with nobody able to guess.
+- **`register` catches new arrivals up on a round in progress**, via the same
+  `sendRoundCatchUp` that `resume` uses. A mid-round joiner used to receive only
+  `ROOM_UPDATE` and sat on the lobby screen until the next round began.
+- **`resume` checks the room code**, not just the `playerId`. The code argument was
+  accepted and ignored. It also drops the `sessionToPlayer` entry for the socket being
+  replaced, which otherwise lingered when the old socket never closed.
+- **`winnerName` breaks ties on name**, so the result does not depend on `HashMap`
+  iteration order.
+
+### Dead code
+
+Removed, and worth knowing so nobody goes looking for them:
+
+- `GameState.nextState()` and `GameStateTest` — the real machine branches, so a single
+  successor per state could not describe it, and `GameManager` always called `setState`
+  directly. The enum is now plain constants.
+- `App.parseId` and `AppTest` — `/image/{token}` takes an opaque string, so there is
+  nothing to parse and no malformed input to reject.
+- `Anime.setId`, and Guava and Gson from `build.gradle` (Jackson does all the JSON).
+
+`GameManager.GuessResult` is returned to `WsRouter`, which discards it; it stays because
+`GameManagerTest` asserts on it and it is the honest return type for the operation.
+`getAllRoomsSnapshot()` is likewise a test accessor with no production caller, which is
+deliberate and documented under the missing `/rooms` route.
+
 ### WebSocket protocol
 
 The wire protocol is defined in two places that must be kept in sync manually:
@@ -262,21 +417,35 @@ Message `type` values: `CREATE_ROOM`, `JOIN_ROOM`, `RESUME`, `START_GAME`, `GUES
 `LEAVE_ROOM` (client→server); `ROOM_CREATED`, `ROOM_JOINED`, `ROOM_UPDATE`,
 `ROUND_START`, `GUESS_RESULT`, `ROUND_END`, `GAME_OVER`, `ERROR` (server→client).
 
+**`ERROR` carries a machine-readable `code` as well as a human `message`**, typed as
+`ErrorCode` in `types.ts`: `BAD_MESSAGE`, `ROOM_NOT_FOUND`, `SESSION_EXPIRED`,
+`NOT_IN_ROOM`, `NOT_HOST`, `ALREADY_STARTED`, `NO_ANIME`. Branch on the code, never on
+the message text — the client used to test `message.includes("expired")` to decide that
+resume was impossible, so rewording a string silently broke recovery.
+
 ### Frontend: single reducer over the WebSocket stream
 
 `GameContext.tsx` owns the entire client state machine as one `useReducer` whose
 `reducer` is effectively a switch over every possible `ServerMsg.type` — the React
-equivalent of a single `handleMessage` dispatcher. There is one WebSocket connection
-per app lifetime, opened in a `useEffect` in `GameProvider`; messages sent before the
-socket is open are queued in `outboxRef` and flushed on `onopen`.
+equivalent of a single `handleMessage` dispatcher. Messages sent before the socket is
+open are queued in `outboxRef` and flushed on `onopen`.
 
+- **The socket reconnects itself.** `ws.onclose` schedules `connect()` again with a
+  linear backoff from 500ms to 5s, and an `unmounted` flag distinguishes a deliberate
+  teardown from a dropped connection. Without this the backend's grace-period/RESUME
+  machinery only ever ran on a manual page refresh, and a server redeploy or a network
+  blip left the page silently dead. Keep the first retries well inside the server's
+  10s `DISCONNECT_GRACE_SECONDS` or RESUME will be too late to help.
+- `state.connected` drives the `.offline` banner in `App.tsx`; it is fixed-position so
+  the game underneath does not jump when the connection flaps.
 - `GameContext.tsx` defines `API_URL` beside `WS_URL` and prefixes the server-sent
-  `imageUrl` (a bare `/image/{id}` path) with it, so `<img src>` resolves against the
+  `imageUrl` (a bare `/image/{token}` path) with it, so `<img src>` resolves against the
   backend rather than the Vite dev server.
 - `playerId` and room `code` are persisted to `sessionStorage` so a page refresh can
   RESUME instead of dropping the player from their room (see backend RESUME above).
-  An `ERROR` message containing "expired" clears `sessionStorage` and resets to the
-  home screen — the server's signal that resume is no longer possible.
+  `ERROR` with code `SESSION_EXPIRED` clears them and resets to the home screen. Use
+  `forgetIdentity()` rather than `sessionStorage.clear()`, which took anything else the
+  origin was storing with it.
 - The countdown timer is derived client-side from a server-provided deadline
   (`roundEndsAt = Date.now() + secondsLeft * 1000`) rather than trusting a
   server-pushed tick, so it stays correct across re-renders and resumes.
