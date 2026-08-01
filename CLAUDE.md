@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Aniguessr: a multiplayer anime-guessing game. Players join a room via a 4-character
+OtakuGuessr: a multiplayer anime-guessing game. Players join a room via a 4-character
 code, are shown an anime cover image with the title scrubbed out of the artwork, and
 race to type the correct title before the round timer runs out. Two independent
 projects:
