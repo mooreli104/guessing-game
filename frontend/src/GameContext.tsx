@@ -36,6 +36,9 @@ export type Screen = "home" | "lobby" | "game" | "over";
 export type State = {
   screen: Screen;
   connected: boolean; // is the socket up right now
+  // Whether the socket has ever opened. Without this the "reconnecting" banner flashes
+  // on every fresh page load, during the moment before the first connection lands.
+  everConnected: boolean;
   resuming: boolean; // reconnecting after a refresh, before the server catches us up
   playerId: string | null;
   code: string | null;
@@ -65,6 +68,7 @@ function initState(): State {
   return {
     screen: "home",
     connected: false,
+    everConnected: false,
     resuming: !!(playerId && code),
     playerId,
     code,
@@ -86,7 +90,11 @@ function initState(): State {
 // One switch over every server message — the React equivalent of the old app.js handleMessage.
 function reducer(state: State, action: Action): State {
   if (action.kind === "socket") {
-    return { ...state, connected: action.connected };
+    return {
+      ...state,
+      connected: action.connected,
+      everConnected: state.everConnected || action.connected,
+    };
   }
 
   if (action.kind === "backToLobby") {
@@ -95,7 +103,7 @@ function reducer(state: State, action: Action): State {
 
   // Left the room entirely — back to a clean home screen (sessionStorage already cleared).
   if (action.kind === "leaveLobby") {
-    return { ...initState(), connected: state.connected, resuming: false };
+    return { ...initState(), connected: state.connected, everConnected: state.everConnected, resuming: false };
   }
 
   const msg = action.msg;
@@ -152,7 +160,7 @@ function reducer(state: State, action: Action): State {
     case "ERROR":
       // The server has forgotten us; there is nothing left to resume into.
       if (msg.code === "SESSION_EXPIRED") {
-        return { ...initState(), connected: state.connected, resuming: false };
+        return { ...initState(), connected: state.connected, everConnected: state.everConnected, resuming: false };
       }
       return { ...state, error: msg.message };
   }

@@ -13,7 +13,7 @@ export default function App() {
 
   return (
     <>
-      {!state.connected && <div className="offline">Reconnecting…</div>}
+      {state.everConnected && !state.connected && <div className="offline">Reconnecting…</div>}
       {state.error && <div className="error">{state.error}</div>}
       {renderScreen(state.screen)}
     </>
