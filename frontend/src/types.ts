@@ -22,4 +22,15 @@ export type ServerMsg =
   | { type: "GUESS_RESULT"; playerId: string; isCorrect: boolean; points: number; totalScore: number }
   | { type: "ROUND_END"; round: number; answer: string; scores: Players }
   | { type: "GAME_OVER"; scores: Players; winner: string }
-  | { type: "ERROR"; message: string };
+  // `code` is the machine-readable half: the client used to test the human-readable
+  // message with .includes("expired"), so rewording it silently broke resume recovery.
+  | { type: "ERROR"; code: ErrorCode; message: string };
+
+export type ErrorCode =
+  | "BAD_MESSAGE"
+  | "ROOM_NOT_FOUND"
+  | "SESSION_EXPIRED"
+  | "NOT_IN_ROOM"
+  | "NOT_HOST"
+  | "ALREADY_STARTED"
+  | "NO_ANIME";

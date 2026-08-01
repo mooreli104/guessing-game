@@ -60,7 +60,8 @@ export default function LobbyScreen() {
                   type="number"
                   min={1}
                   value={rounds}
-                  onChange={(e) => setRounds(Number(e.target.value))}
+                  // An emptied number input reads as "", and Number("") is NaN.
+                  onChange={(e) => setRounds(Math.max(1, Number(e.target.value) || 1))}
                 />
               </div>
               <div>
@@ -69,7 +70,7 @@ export default function LobbyScreen() {
                   type="number"
                   min={5}
                   value={seconds}
-                  onChange={(e) => setSeconds(Number(e.target.value))}
+                  onChange={(e) => setSeconds(Math.max(5, Number(e.target.value) || 5))}
                 />
               </div>
             </div>

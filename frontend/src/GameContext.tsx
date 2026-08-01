@@ -16,13 +16,26 @@ import type { ClientMsg, Players, ServerMsg } from "./types";
 const API_URL = import.meta.env.DEV ? "http://localhost:7070" : window.location.origin;
 
 // Round images are served by the backend, not the Vite dev server, so the
-// server-sent "/image/{id}" path has to resolve against this origin.
+// server-sent "/image/{token}" path has to resolve against this origin.
 const WS_URL = API_URL.replace(/^http/, "ws") + "/websocket/game";
+
+// The server holds a disconnected player for 10s before dropping them, so the first
+// retries need to land well inside that window for RESUME to still work.
+const RETRY_MIN_MS = 500;
+const RETRY_MAX_MS = 5000;
+
+// Only these two keys are ours; clearing all of sessionStorage would take anything else
+// the origin happens to be storing with it.
+function forgetIdentity() {
+  sessionStorage.removeItem("playerId");
+  sessionStorage.removeItem("code");
+}
 
 export type Screen = "home" | "lobby" | "game" | "over";
 
 export type State = {
   screen: Screen;
+  connected: boolean; // is the socket up right now
   resuming: boolean; // reconnecting after a refresh, before the server catches us up
   playerId: string | null;
   code: string | null;
@@ -40,13 +53,18 @@ export type State = {
   error: string;
 };
 
-type Action = { kind: "server"; msg: ServerMsg } | { kind: "backToLobby" } | { kind: "leaveLobby" };
+type Action =
+  | { kind: "server"; msg: ServerMsg }
+  | { kind: "socket"; connected: boolean }
+  | { kind: "backToLobby" }
+  | { kind: "leaveLobby" };
 
 function initState(): State {
   const playerId = sessionStorage.getItem("playerId");
   const code = sessionStorage.getItem("code");
   return {
     screen: "home",
+    connected: false,
     resuming: !!(playerId && code),
     playerId,
     code,
@@ -67,13 +85,17 @@ function initState(): State {
 
 // One switch over every server message — the React equivalent of the old app.js handleMessage.
 function reducer(state: State, action: Action): State {
+  if (action.kind === "socket") {
+    return { ...state, connected: action.connected };
+  }
+
   if (action.kind === "backToLobby") {
     return { ...state, screen: "lobby", answer: "", feedback: "", winner: "", finalScores: {} };
   }
 
   // Left the room entirely — back to a clean home screen (sessionStorage already cleared).
   if (action.kind === "leaveLobby") {
-    return { ...initState(), resuming: false };
+    return { ...initState(), connected: state.connected, resuming: false };
   }
 
   const msg = action.msg;
@@ -93,6 +115,7 @@ function reducer(state: State, action: Action): State {
         ...state,
         screen: "game",
         resuming: false,
+        error: "",
         round: msg.round,
         totalRounds: msg.totalRounds,
         imageUrl: API_URL + msg.imageUrl,
@@ -127,8 +150,9 @@ function reducer(state: State, action: Action): State {
       return { ...state, screen: "over", winner: msg.winner, finalScores: msg.scores, roundEndsAt: null };
 
     case "ERROR":
-      if (msg.message.includes("expired")) {
-        return { ...initState(), resuming: false };
+      // The server has forgotten us; there is nothing left to resume into.
+      if (msg.code === "SESSION_EXPIRED") {
+        return { ...initState(), connected: state.connected, resuming: false };
       }
       return { ...state, error: msg.message };
   }
@@ -156,39 +180,70 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
+    // `unmounted` separates a deliberate teardown from a dropped connection: only the
+    // latter should reconnect.
+    let unmounted = false;
+    let retryTimer: number | undefined;
+    let attempt = 0;
 
-    ws.onopen = () => {
-      outboxRef.current.forEach((m) => ws.send(m));
-      outboxRef.current = [];
-      // Recover identity after a full-page refresh / reconnect.
-      const playerId = sessionStorage.getItem("playerId");
-      const code = sessionStorage.getItem("code");
-      if (playerId && code) ws.send(JSON.stringify({ type: "RESUME", playerId, code }));
-    };
+    function connect() {
+      const ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
 
-    ws.onmessage = (e) => {
-      const msg = JSON.parse(e.data) as ServerMsg;
-      if (msg.type === "ROOM_CREATED" || msg.type === "ROOM_JOINED") {
-        sessionStorage.setItem("playerId", msg.playerId);
-        sessionStorage.setItem("code", msg.code);
-      } else if (msg.type === "ERROR" && msg.message.includes("expired")) {
-        sessionStorage.clear();
-      }
-      dispatch({ kind: "server", msg });
-    };
+      ws.onopen = () => {
+        attempt = 0;
+        dispatch({ kind: "socket", connected: true });
+        outboxRef.current.forEach((m) => ws.send(m));
+        outboxRef.current = [];
+        // Recover identity after a full-page refresh / reconnect.
+        const playerId = sessionStorage.getItem("playerId");
+        const code = sessionStorage.getItem("code");
+        if (playerId && code) ws.send(JSON.stringify({ type: "RESUME", playerId, code }));
+      };
+
+      ws.onmessage = (e) => {
+        let msg: ServerMsg;
+        try {
+          msg = JSON.parse(e.data) as ServerMsg;
+        } catch {
+          return; // not something we sent for; ignore rather than kill the handler
+        }
+        if (msg.type === "ROOM_CREATED" || msg.type === "ROOM_JOINED") {
+          sessionStorage.setItem("playerId", msg.playerId);
+          sessionStorage.setItem("code", msg.code);
+        } else if (msg.type === "ERROR" && msg.code === "SESSION_EXPIRED") {
+          forgetIdentity();
+        }
+        dispatch({ kind: "server", msg });
+      };
+
+      // A dropped socket used to leave the page silently dead: the server's whole
+      // grace-period/RESUME machinery only ever ran on a manual refresh. Back off
+      // gently, but start fast enough to reconnect inside the grace window.
+      ws.onclose = () => {
+        if (unmounted) return;
+        dispatch({ kind: "socket", connected: false });
+        attempt += 1;
+        retryTimer = window.setTimeout(connect, Math.min(RETRY_MIN_MS * attempt, RETRY_MAX_MS));
+      };
+    }
+
+    connect();
 
     // StrictMode dev double-mount closes this first socket and opens a second one; the backend's
     // disconnect grace period + RESUME make that transient churn harmless.
-    return () => ws.close();
+    return () => {
+      unmounted = true;
+      window.clearTimeout(retryTimer);
+      wsRef.current?.close();
+    };
   }, []);
 
   const backToLobby = useCallback(() => dispatch({ kind: "backToLobby" }), []);
 
   const leaveLobby = useCallback(() => {
     send({ type: "LEAVE_ROOM" });
-    sessionStorage.clear(); // don't RESUME back into the room we just left
+    forgetIdentity(); // don't RESUME back into the room we just left
     dispatch({ kind: "leaveLobby" });
   }, [send]);
 

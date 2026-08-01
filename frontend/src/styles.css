@@ -284,6 +284,23 @@ input:disabled {
   font-weight: 800;
 }
 
+/* The socket dropped mid-session. Floated rather than in flow so the game underneath
+   does not jump, and quiet -- the client retries on its own and usually wins. */
+.offline {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: var(--sun);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 14px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  box-shadow: 0 3px 0 var(--sun-lip);
+}
+
 /* --- Lobby --------------------------------------------------------------- */
 
 .code-block {
