@@ -21,10 +21,9 @@ dependencies {
 
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-    // This dependency is used by the application.
-    implementation libs.guava
+    // Jackson does all the JSON, on both the WebSocket protocol and the MAL client.
+    // Guava and Gson used to be declared here and were imported nowhere.
     implementation 'io.javalin:javalin:7.1.0'
-    implementation 'com.google.code.gson:gson:2.7'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
     implementation 'org.postgresql:postgresql:42.7.4'
 

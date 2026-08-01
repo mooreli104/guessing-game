@@ -1,17 +1,14 @@
 package org.aniguessr;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class Anime {
-    private int id;
-    private String url;
-    private List<String> titles;
+    private final int id;
+    private final String url;
+    private final List<String> titles;
 
-    public Anime(){
-        this.id = 0;
-        this.url = "";
-        this.titles = new ArrayList<>();
+    public Anime() {
+        this(0, "", List.of());
     }
 
     public Anime(String url, List<String> titles) {
@@ -21,12 +18,13 @@ public class Anime {
     public Anime(int id, String url, List<String> titles) {
         this.id = id;
         this.url = url;
-        this.titles = titles;
+        this.titles = List.copyOf(titles);
     }
 
     public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
     public String getUrl() { return url; }
+
+    /** Immutable: the answer must not be editable by whoever holds a reference to it. */
     public List<String> getTitles() { return titles; }
 
     // Standard Levenshtein edit distance between two strings.
@@ -62,11 +60,11 @@ public class Anime {
         return title.split("\\s*:\\s*|\\s+-\\s+")[0].trim();
     }
 
-    // True when the guess is close enough to the answer. As well as a fuzzy match
-    // on the whole title, a guess of at least 5 characters may match the base name
-    // (or a word of it), so "demon slayer" is accepted for "Demon Slayer: Mugen
-    // Train" but the arc name "mugen train" is not.
-    public boolean levanshtein(String answer, String guess){
+    // True when the guess is close enough to one title. As well as a fuzzy match on the
+    // whole title, a guess of at least 5 characters may match the base name (or a word of
+    // it), so "demon slayer" is accepted for "Demon Slayer: Mugen Train" but the arc name
+    // "mugen train" is not.
+    private boolean matchesTitle(String answer, String guess) {
         String a = answer.toLowerCase().trim();
         String g = guess.toLowerCase().trim();
         if (a.isEmpty() || g.isEmpty()) return false;
@@ -89,11 +87,11 @@ public class Anime {
         return false;
     }
 
-    public boolean isCorrect(String guess){
-        for(String str: this.titles){
-            if(levanshtein(str, guess)) return true;
+    public boolean isCorrect(String guess) {
+        if (guess == null) return false;
+        for (String title : titles) {
+            if (matchesTitle(title, guess)) return true;
         }
         return false;
     }
-
 }

@@ -1,34 +1,18 @@
 package org.aniguessr;
 
-
+/**
+ * Where a room is in its lifecycle: LOBBY -> ROUND_ACTIVE -> ROUND_SCORING, then either
+ * back to ROUND_ACTIVE for the next round or on to GAME_OVER, which returns to LOBBY so
+ * the same room can replay.
+ *
+ * Transitions are made explicitly by {@link GameManager} via {@code room.setState(...)}.
+ * There used to be a {@code nextState()} method here modelling the happy path, but
+ * nothing ever called it -- the real machine branches, so a single successor per state
+ * could not describe it.
+ */
 public enum GameState {
-    LOBBY{
-        @Override
-        public GameState nextState() {
-            return ROUND_ACTIVE;
-        }
-    },
-    ROUND_ACTIVE{
-         @Override
-        public GameState nextState() {
-            return ROUND_SCORING;
-        }
-
-    },
-    ROUND_SCORING{
-        @Override
-        public GameState nextState() {
-            return GAME_OVER;
-        }
-
-    },
-    GAME_OVER{
-        @Override
-        public GameState nextState() {
-            return this;
-        }
-    };
-
-    public abstract GameState nextState(); 
-
+    LOBBY,
+    ROUND_ACTIVE,
+    ROUND_SCORING,
+    GAME_OVER
 }
