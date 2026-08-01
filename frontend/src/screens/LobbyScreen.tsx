@@ -5,59 +5,88 @@ export default function LobbyScreen() {
   const { state, send, leaveLobby } = useGame();
   const [rounds, setRounds] = useState(3);
   const [seconds, setSeconds] = useState(30);
+  const [copied, setCopied] = useState(false);
 
   const isHost = state.host === state.playerId;
+  const players = Object.entries(state.players);
 
   function startGame() {
     send({ type: "START_GAME", rounds, roundSeconds: seconds });
   }
 
+  function copyCode() {
+    if (!state.code) return;
+    navigator.clipboard?.writeText(state.code).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      // Clipboard access can be refused; the code is on screen to read out anyway.
+      () => setCopied(false)
+    );
+  }
+
   return (
     <div className="center">
-      <h1>Lobby</h1>
-      <div>Room code:</div>
-      <div className="code">{state.code}</div>
-
-      <h3>Players</h3>
-      <ul className="players">
-        {Object.entries(state.players).map(([id, p]) => (
-          <li key={id}>
-            {p.name}
-            {id === state.playerId ? " (you)" : ""}
-          </li>
-        ))}
-      </ul>
-
-      {isHost ? (
-        <div className="hostControls">
-          <label>
-            Rounds:{" "}
-            <input
-              type="number"
-              min={1}
-              value={rounds}
-              onChange={(e) => setRounds(Number(e.target.value))}
-            />
-          </label>
-          <label>
-            Seconds/round:{" "}
-            <input
-              type="number"
-              min={5}
-              value={seconds}
-              onChange={(e) => setSeconds(Number(e.target.value))}
-            />
-          </label>
-          <div>
-            <button onClick={startGame}>Start Game</button>
-          </div>
+      <div className="panel stack">
+        <div className="code-block">
+          <div className="field-label">Room code</div>
+          <div className="code">{state.code}</div>
+          <button className="quiet" onClick={copyCode}>
+            {copied ? "Copied" : "Copy code"}
+          </button>
         </div>
-      ) : (
-        <div>Waiting for the host to start…</div>
-      )}
 
-      <div className="row">
-        <button onClick={leaveLobby}>Leave Lobby</button>
+        <div>
+          <div className="section-title">
+            Players ({players.length})
+          </div>
+          <ul className="players" style={{ marginTop: 8 }}>
+            {players.map(([id, p]) => (
+              <li key={id} className={id === state.playerId ? "me" : ""}>
+                {p.name}
+                {id === state.playerId ? " (you)" : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {isHost ? (
+          <>
+            <div className="settings">
+              <div>
+                <div className="field-label">Rounds</div>
+                <input
+                  type="number"
+                  min={1}
+                  value={rounds}
+                  onChange={(e) => setRounds(Number(e.target.value))}
+                />
+              </div>
+              <div>
+                <div className="field-label">Seconds per round</div>
+                <input
+                  type="number"
+                  min={5}
+                  value={seconds}
+                  onChange={(e) => setSeconds(Number(e.target.value))}
+                />
+              </div>
+            </div>
+
+            <button className="go wide" onClick={startGame}>
+              Start game
+            </button>
+          </>
+        ) : (
+          <div className="waiting">Waiting for the host to start…</div>
+        )}
+      </div>
+
+      <div style={{ textAlign: "center", marginTop: 10 }}>
+        <button className="quiet" onClick={leaveLobby}>
+          Leave lobby
+        </button>
       </div>
     </div>
   );

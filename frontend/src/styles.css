@@ -1,125 +1,566 @@
+/* ---------------------------------------------------------------------------
+   Aniguessr - a loud party game for friends in a call.
+
+   The look is built on one idea: everything you can press should look pressable.
+   Buttons and pills carry a darker bottom "lip" and physically sink when clicked,
+   which is where all the boldness is spent. Everything else stays quiet.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --grape-deep: #241245;
+  --grape: #3b1f6e;
+  --grape-line: #170b2e;
+  --cream: #fff6ec;
+
+  --punch: #ff4d6d;
+  --punch-lip: #c22f4c;
+  --mint: #2fd58f;
+  --mint-lip: #1da76d;
+  --sun: #ffc93c;
+  --sun-lip: #d19a12;
+
+  --ink: #241245;
+  --ink-soft: #6b5b8a;
+
+  --lip: 5px; /* how far a pressable thing sits above its shadow */
+  --radius: 18px;
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
-  font-family: sans-serif;
   margin: 0;
-  color: #222;
+  min-height: 100vh;
+  font-family: Nunito, system-ui, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 50% 0%, #552d9c 0%, transparent 60%),
+    var(--grape-deep);
+  background-attachment: fixed;
 }
 
+h1, h2, h3 {
+  font-family: "Baloo 2", Nunito, sans-serif;
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0;
+}
+
+/* --- Layout ------------------------------------------------------------- */
+
+/* Home, lobby and results are short enough to sit centred in the viewport; the game
+   screen is tall, so it stays top-aligned and scrolls normally. */
 .center {
-  max-width: 480px;
-  margin: 40px auto;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.game {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+/* The cream surface everything sits on. */
+.panel {
+  background: var(--cream);
+  border-radius: var(--radius);
+  box-shadow: 0 var(--lip) 0 var(--grape-line), 0 14px 30px rgb(0 0 0 / 35%);
+  padding: 24px;
+}
+
+.stack {
+  display: grid;
+  gap: 14px;
+}
+
+/* --- Wordmark ------------------------------------------------------------ */
+
+.wordmark {
   text-align: center;
-  padding: 0 16px;
+  margin-bottom: 22px;
 }
 
-.row {
-  margin-top: 16px;
+.wordmark h1 {
+  font-size: clamp(40px, 12vw, 62px);
+  color: var(--cream);
+  letter-spacing: -0.02em;
+  text-shadow: 0 4px 0 var(--grape-line);
 }
 
-input {
-  padding: 8px;
-  margin: 4px;
+.wordmark h1 span {
+  color: var(--sun);
 }
+
+.tagline {
+  margin-top: 6px;
+  color: #c9b8e8;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* --- Pressable things ---------------------------------------------------- */
 
 button {
-  padding: 8px 16px;
-  margin: 4px;
+  font-family: "Baloo 2", Nunito, sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  color: #fff;
+  background: var(--punch);
+  border: none;
+  border-radius: 14px;
+  padding: 13px 22px;
   cursor: pointer;
+  box-shadow: 0 var(--lip) 0 var(--punch-lip);
+  transition: transform 80ms ease, box-shadow 80ms ease, filter 120ms ease;
 }
+
+button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+/* The signature: pressing pushes the button down onto its own shadow. */
+button:active:not(:disabled) {
+  transform: translateY(var(--lip));
+  box-shadow: 0 0 0 var(--punch-lip);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.go {
+  background: var(--mint);
+  box-shadow: 0 var(--lip) 0 var(--mint-lip);
+}
+
+button.go:active:not(:disabled) {
+  box-shadow: 0 0 0 var(--mint-lip);
+}
+
+button.quiet {
+  background: transparent;
+  color: #c9b8e8;
+  box-shadow: none;
+  font-size: 15px;
+  padding: 8px 14px;
+}
+
+button.quiet:hover:not(:disabled) {
+  color: var(--cream);
+}
+
+/* The quiet colour is tuned for the dark canvas; on a cream panel it needs to darken. */
+.panel button.quiet {
+  color: var(--ink-soft);
+}
+
+.panel button.quiet:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+button.quiet:active:not(:disabled) {
+  transform: none;
+}
+
+button.wide {
+  width: 100%;
+}
+
+/* --- Inputs -------------------------------------------------------------- */
+
+input {
+  font-family: Nunito, sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ink);
+  width: 100%;
+  padding: 13px 16px;
+  background: #fff;
+  border: 3px solid #e5d9ee;
+  border-radius: 14px;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+input::placeholder {
+  color: #b3a6c6;
+  font-weight: 600;
+}
+
+input:focus {
+  border-color: var(--punch);
+}
+
+input:disabled {
+  background: #f1ebf6;
+  color: var(--ink-soft);
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+
+/* Split row: code input + join button. */
+.join-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.join-row input {
+  font-family: "Baloo 2", monospace;
+  font-size: 22px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  height: 3px;
+  border-radius: 2px;
+  background: #ece2f3;
+}
+
+/* --- Messages ------------------------------------------------------------ */
 
 .error {
-  background: #ffe0e0;
-  color: #a00000;
+  max-width: 520px;
+  margin: 16px auto 0;
+  background: var(--punch);
+  color: #fff;
+  font-weight: 800;
   text-align: center;
-  padding: 8px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  box-shadow: 0 4px 0 var(--punch-lip);
 }
 
-/* Lobby */
+.hint {
+  min-height: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--punch);
+  text-align: center;
+}
+
+.reconnecting {
+  color: var(--cream);
+  text-align: center;
+  padding-top: 80px;
+  font-family: "Baloo 2", sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* --- Lobby --------------------------------------------------------------- */
+
+.code-block {
+  text-align: center;
+}
+
 .code {
-  font-size: 32px;
-  letter-spacing: 4px;
-  font-weight: bold;
-  margin: 12px 0;
+  font-family: "Baloo 2", monospace;
+  font-size: clamp(44px, 15vw, 64px);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+  /* The code is read aloud to friends, so give it room to breathe. */
+  padding: 6px 0 2px 12px;
+  line-height: 1.1;
+}
+
+.copy-hint {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }
 
 .players {
   list-style: none;
   padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .players li {
-  padding: 6px;
-  background: #f2f2f2;
-  margin: 4px auto;
-  width: 240px;
-  border-radius: 4px;
+  background: #f3ecf9;
+  border-radius: 999px;
+  padding: 8px 15px;
+  font-weight: 800;
+  font-size: 15px;
+  box-shadow: 0 3px 0 #ddd0e8;
 }
 
-.hostControls {
-  margin-top: 24px;
+.players li.me {
+  background: var(--sun);
+  box-shadow: 0 3px 0 var(--sun-lip);
 }
 
-/* Game */
-.game {
-  max-width: 640px;
-  margin: 24px auto;
-  padding: 0 16px;
+.settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
+
+.waiting {
+  text-align: center;
+  font-weight: 800;
+  color: var(--ink-soft);
+  padding: 6px 0;
+}
+
+/* --- Game ---------------------------------------------------------------- */
 
 .top {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
+  color: var(--cream);
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.round-label {
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #c9b8e8;
 }
 
 .timer {
-  font-size: 22px;
-  font-weight: bold;
+  font-family: "Baloo 2", sans-serif;
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  color: var(--sun);
+}
+
+.timer.low {
+  color: var(--punch);
+}
+
+/* Draining bar - the round's urgency made visible. */
+.timer-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--grape-line);
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+
+.timer-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--sun);
+  transition: width 250ms linear, background-color 400ms ease;
+}
+
+.timer-fill.low {
+  background: var(--punch);
+}
+
+/* The cover sits in a card frame, tilted just enough to read as a played card. */
+.card-frame {
+  background: var(--cream);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: 0 var(--lip) 0 var(--grape-line), 0 16px 34px rgb(0 0 0 / 40%);
+  transform: rotate(-1.2deg);
+  width: fit-content;
+  margin: 0 auto 18px;
 }
 
 .animeImg {
   display: block;
-  margin: 16px auto;
   max-width: 100%;
-  max-height: 320px;
+  max-height: 46vh;
+  border-radius: 10px;
 }
 
 .answer {
   text-align: center;
-  min-height: 22px;
-  font-weight: bold;
-  color: #333;
+  min-height: 26px;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 19px;
+  color: var(--sun);
+  margin-bottom: 10px;
 }
 
 .feedback {
   text-align: center;
-  min-height: 22px;
-  font-weight: bold;
-  color: #227722;
+  min-height: 24px;
+  font-weight: 800;
+  color: var(--mint);
+  margin-top: 8px;
+}
+
+.feedback.miss {
+  color: #c9b8e8;
+}
+
+.guess-input {
+  font-size: 19px;
+  text-align: center;
+  border-color: transparent;
+  box-shadow: 0 var(--lip) 0 var(--grape-line);
 }
 
 .scores {
-  margin: 16px auto;
-  border-collapse: collapse;
-  min-width: 260px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 0;
+  list-style: none;
 }
 
-.scores td {
-  padding: 6px 16px;
-  border-bottom: 1px solid #eee;
+.scores li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  background: var(--grape);
+  color: var(--cream);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 3px 0 var(--grape-line);
+}
+
+.scores li.me {
+  background: var(--sun);
+  color: var(--ink);
+  box-shadow: 0 3px 0 var(--sun-lip);
 }
 
 .scores .score {
-  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
 }
 
-/* Over */
+/* --- Game over ----------------------------------------------------------- */
+
+.trophy {
+  font-size: 54px;
+  text-align: center;
+  line-height: 1;
+}
+
 .winner {
-  font-size: 24px;
-  font-weight: bold;
-  margin: 16px 0;
-  color: #b8860b;
+  text-align: center;
+  font-family: "Baloo 2", sans-serif;
+  font-size: clamp(28px, 9vw, 40px);
+  font-weight: 800;
+  color: var(--ink);
+  margin: 6px 0 18px;
+}
+
+.standings {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.standings li {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  background: #f3ecf9;
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-weight: 800;
+}
+
+.standings li.first {
+  background: var(--sun);
+  box-shadow: 0 3px 0 var(--sun-lip);
+}
+
+.standings .rank {
+  font-family: "Baloo 2", sans-serif;
+  font-size: 18px;
+  color: var(--ink-soft);
+}
+
+.standings li.first .rank {
+  color: var(--ink);
+}
+
+.standings .points {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Quality floor ------------------------------------------------------- */
+
+:focus-visible {
+  outline: 3px solid var(--sun);
+  outline-offset: 3px;
+}
+
+/* Inputs already signal focus by changing their border, so the outline would double up. */
+input:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+
+  .card-frame {
+    transform: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .settings {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    padding: 18px;
+  }
 }

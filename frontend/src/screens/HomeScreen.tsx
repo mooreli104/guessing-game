@@ -5,38 +5,62 @@ export default function HomeScreen() {
   const { send } = useGame();
   const [username, setUsername] = useState("");
   const [code, setCode] = useState("");
+  const [hint, setHint] = useState("");
 
   function createRoom() {
-    if (!username) return alert("Enter a name first");
-    send({ type: "CREATE_ROOM", username });
+    if (!username.trim()) return setHint("Pick a name first");
+    setHint("");
+    send({ type: "CREATE_ROOM", username: username.trim() });
   }
 
   function joinRoom() {
-    if (!username || !code) return alert("Enter a name and code");
-    send({ type: "JOIN_ROOM", username, code: code.toUpperCase() });
+    if (!username.trim()) return setHint("Pick a name first");
+    if (!code.trim()) return setHint("Enter the 4-character room code");
+    setHint("");
+    send({ type: "JOIN_ROOM", username: username.trim(), code: code.trim().toUpperCase() });
   }
 
   return (
     <div className="center">
-      <h1>AniGuessr</h1>
-
-      <input
-        placeholder="Your name"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-      />
-
-      <div className="row">
-        <button onClick={createRoom}>Create Room</button>
+      <div className="wordmark">
+        <h1>
+          Ani<span>Guessr</span>
+        </h1>
+        <div className="tagline">The title is scrubbed off the cover. Type it first.</div>
       </div>
 
-      <div className="row">
-        <input
-          placeholder="Room code"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-        />
-        <button onClick={joinRoom}>Join Room</button>
+      <div className="panel stack">
+        <div>
+          <div className="field-label">Your name</div>
+          <input
+            placeholder="Who's playing?"
+            value={username}
+            maxLength={16}
+            onChange={(e) => setUsername(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && createRoom()}
+          />
+        </div>
+
+        <button className="wide" onClick={createRoom}>
+          Create room
+        </button>
+
+        <div className="divider">or</div>
+
+        <div className="join-row">
+          <input
+            placeholder="CODE"
+            value={code}
+            maxLength={4}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && joinRoom()}
+          />
+          <button className="go" onClick={joinRoom}>
+            Join
+          </button>
+        </div>
+
+        <div className="hint">{hint}</div>
       </div>
     </div>
   );

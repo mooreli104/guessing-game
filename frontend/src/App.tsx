@@ -8,7 +8,7 @@ export default function App() {
   const { state } = useGame();
 
   if (state.resuming) {
-    return <div className="center">Reconnecting…</div>;
+    return <div className="reconnecting">Reconnecting…</div>;
   }
 
   return (
