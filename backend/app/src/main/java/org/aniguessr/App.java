@@ -13,6 +13,7 @@ public class App {
     public static void main(String[] args) {
         AnimeRepository repository = new PostgresAnimeRepository(new Db());
         WsRouter router = new WsRouter(repository);
+        GameManager games = router.getGameManager();
 
         var app = Javalin.create(config -> {
             // The built frontend ships inside the jar, so the whole game is one process on
@@ -25,16 +26,20 @@ public class App {
             // which meant it returned 500 during a round (a Room holds a ScheduledFuture)
             // and, had it serialised, would have published Room.getAnime() -- the current
             // answer -- to anyone who polled it. getAllRoomsSnapshot stays for the tests.
-            config.routes.get("/image/{id}", ctx -> {
-                // The id comes straight off the URL, so it is whatever the caller typed.
-                // Anything that is not an anime id is simply not found -- letting
-                // parseInt throw would answer a malformed URL with a 500.
-                Integer id = parseId(ctx.pathParam("id"));
+            config.routes.get("/image/{token}", ctx -> {
+                // The token is an opaque per-round handle, never the anime id: the anime id
+                // is MyAnimeList's own, so /image/5114 told anyone who looked at the URL
+                // exactly what the answer was. Unknown or spent tokens are simply not found,
+                // so no input needs parsing or validating here.
+                Integer id = games.animeIdForToken(ctx.pathParam("token"));
                 byte[] bytes = id == null ? null : repository.imageBytes(id);
                 if (bytes == null) {
                     ctx.status(404);
                     return;
                 }
+                // A token names one fixed image for the life of a round, so the browser can
+                // keep it rather than re-fetching the cover on every render.
+                ctx.header("Cache-Control", "private, max-age=3600, immutable");
                 ctx.contentType("image/jpeg").result(bytes);
             });
             config.routes.ws("/websocket/game", ws -> {
@@ -44,21 +49,12 @@ public class App {
             });
         });
 
+        // Round timers run on a scheduler thread that would otherwise keep the JVM alive.
+        Runtime.getRuntime().addShutdownHook(new Thread(games::shutdown));
+
         // Bind every interface: inside a container, binding loopback would make the server
         // unreachable from outside it.
         app.start("0.0.0.0", PORT);
-    }
-
-    /** The id from a path segment, or null when it is not a number we could look up. */
-    static Integer parseId(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        try {
-            return Integer.valueOf(raw);
-        } catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     private static int port() {

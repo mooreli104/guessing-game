@@ -273,6 +273,121 @@ class GameManagerTest {
         assertDoesNotThrow(() -> gm.startGame("nobody", 1, 5));
     }
 
+    @Test
+    void startGame_whileARoundIsRunning_isRejected() {
+        repo.save(new Anime(1, "u", List.of("One")), new byte[]{1});
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        Room room = startActiveRound(host.code(), List.of("Naruto"), 30, 3);
+        room.setRound(2);
+        sender.clear();
+
+        // Restarting mid-game used to orphan the running round's timer, which then fired
+        // and cut the new round short -- and it reset everyone's scores on the way.
+        gm.startGame("s1", 3, 30);
+
+        assertEquals("ERROR", sender.lastTo("s1").get("type"));
+        assertEquals("ALREADY_STARTED", sender.lastTo("s1").get("code"));
+        assertEquals(GameState.ROUND_ACTIVE, room.getState());
+        assertEquals(2, room.getRound(), "the running game must be left alone");
+    }
+
+    // ---- players arriving and leaving mid-round ----
+
+    @Test
+    void joinRoom_duringARound_catchesTheNewPlayerUp() {
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        Room room = startActiveRound(host.code(), List.of("Naruto"), 30, 1);
+        room.setImageToken("tok");
+        sender.clear();
+
+        gm.joinRoom("Bob", host.code(), "s2");
+
+        // Bob used to get only ROOM_UPDATE and sat on the lobby screen until the next round.
+        Map<String, Object> caughtUp = sender.lastTo("s2");
+        assertEquals("ROUND_START", caughtUp.get("type"));
+        assertEquals("/image/tok", caughtUp.get("imageUrl"));
+        assertTrue((int) caughtUp.get("secondsLeft") <= 30);
+    }
+
+    @Test
+    void leavingAfterGuessing_doesNotEndLaterRoundsEarly() {
+        GameManager.JoinResult a = gm.createRoom("Alice", "s1");
+        gm.joinRoom("Bob", a.code(), "s2");
+        gm.joinRoom("Cara", a.code(), "s3");
+        Room room = startActiveRound(a.code(), List.of("Naruto"), 30, 1);
+
+        gm.guess("naruto", "s1"); // Alice is correct, then leaves
+        gm.leaveRoom("s1");
+
+        // Two players remain and only one of them has guessed, so the round continues.
+        gm.guess("naruto", "s2");
+        assertEquals(GameState.ROUND_ACTIVE, room.getState(),
+            "Alice's stale id must not count towards the everyone-guessed check");
+
+        gm.guess("naruto", "s3");
+        assertEquals(GameState.ROUND_SCORING, room.getState());
+    }
+
+    @Test
+    void lastUnguessedPlayerLeaving_endsTheRound() {
+        GameManager.JoinResult a = gm.createRoom("Alice", "s1");
+        gm.joinRoom("Bob", a.code(), "s2");
+        Room room = startActiveRound(a.code(), List.of("Naruto"), 30, 1);
+
+        gm.guess("naruto", "s1");
+        assertEquals(GameState.ROUND_ACTIVE, room.getState());
+
+        gm.leaveRoom("s2"); // the only player still guessing gives up and leaves
+
+        assertEquals(GameState.ROUND_SCORING, room.getState(),
+            "nobody is left to guess, so the round should not run out its clock");
+    }
+
+    // ---- resume checks the room, and names are bounded ----
+
+    @Test
+    void resume_withTheWrongRoomCode_isRejected() {
+        GameManager.JoinResult jr = gm.createRoom("Alice", "s1");
+        gm.resume(jr.playerId(), "ZZZZ", "s2");
+
+        assertEquals("SESSION_EXPIRED", sender.lastTo("s2").get("code"));
+        // The rejected session must not have been bound to Alice's identity.
+        startActiveRound(jr.code(), List.of("Naruto"), 30, 1);
+        assertNull(gm.guess("naruto", "s2"));
+    }
+
+    @Test
+    void username_isTrimmedAndCappedServerSide() {
+        // maxLength in the browser is a suggestion; the server is what everyone else sees.
+        GameManager.JoinResult jr = gm.createRoom("  " + "x".repeat(200) + "  ", "s1");
+        Room room = gm.getAllRoomsSnapshot().get(jr.code());
+        assertEquals(16, room.getPlayers().get(jr.playerId()).getName().length());
+    }
+
+    @Test
+    void username_blankFallsBackToAPlaceholder() {
+        GameManager.JoinResult jr = gm.createRoom("   ", "s1");
+        Room room = gm.getAllRoomsSnapshot().get(jr.code());
+        assertEquals("Player", room.getPlayers().get(jr.playerId()).getName());
+    }
+
+    @Test
+    void winner_tieIsBrokenDeterministically() throws InterruptedException {
+        GameManager.JoinResult a = gm.createRoom("Zoe", "s1");
+        String adamId = gm.joinRoom("Adam", a.code(), "s2").playerId();
+        Room room = startActiveRound(a.code(), List.of("Naruto"), 30, 1);
+
+        // Both correct in the same instant of a 30s round, so both score the maximum.
+        gm.guess("naruto", "s1");
+        gm.guess("naruto", "s2");
+        await(() -> sender.has("GAME_OVER"), 8000);
+
+        assertEquals(room.getPlayers().get(a.playerId()).getScore(),
+            room.getPlayers().get(adamId).getScore(), "test needs a genuine tie");
+        assertEquals("Adam", sender.last("GAME_OVER").get("winner"),
+            "a tie should not depend on hash-map iteration order");
+    }
+
     // ---- full round -> game over (exercises the reveal delay + winner + reset) ----
 
     @Test
@@ -313,7 +428,7 @@ class GameManagerTest {
     }
 
     @Test
-    void startGame_withPool_startsRoundAndServesLocalImageUrl() {
+    void startGame_withPool_startsRoundAndServesTokenisedImageUrl() {
         repo.save(new Anime(5114, "https://cdn.myanimelist.net/x.jpg",
             List.of("Fullmetal Alchemist")), new byte[]{1, 2, 3});
 
@@ -327,7 +442,56 @@ class GameManagerTest {
 
         Map<String, Object> start = sender.last("ROUND_START");
         assertNotNull(start);
-        assertEquals("/image/5114", start.get("imageUrl"));
+
+        // The URL must not carry the anime id: it is MyAnimeList's own id, so /image/5114
+        // told anyone who opened the network tab exactly what the answer was.
+        String imageUrl = (String) start.get("imageUrl");
+        assertFalse(imageUrl.contains("5114"), imageUrl);
+        assertEquals("/image/" + room.getImageToken(), imageUrl);
+        assertEquals(5114, gm.animeIdForToken(room.getImageToken()));
+    }
+
+    // ---- image tokens ----
+
+    @Test
+    void animeIdForToken_unknownOrMissingToken_isNull() {
+        assertNull(gm.animeIdForToken(null));
+        assertNull(gm.animeIdForToken(""));
+        assertNull(gm.animeIdForToken("not-a-token"));
+        assertNull(gm.animeIdForToken("../../etc/passwd"));
+    }
+
+    @Test
+    void imageToken_isFreshEachRoundAndTheOldOneStopsResolving() {
+        repo.save(new Anime(1, "u", List.of("One")), new byte[]{1});
+        repo.save(new Anime(2, "u", List.of("Two")), new byte[]{2});
+
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        Room room = gm.getAllRoomsSnapshot().get(host.code());
+        gm.startGame("s1", 2, 30);
+        String first = room.getImageToken();
+
+        gm.startRound(room); // the next round mints a new handle
+        String second = room.getImageToken();
+
+        assertNotEquals(first, second);
+        assertNull(gm.animeIdForToken(first), "a spent token must stop resolving");
+        assertNotNull(gm.animeIdForToken(second));
+    }
+
+    @Test
+    void imageToken_isReleasedWhenTheRoomEmpties() {
+        repo.save(new Anime(1, "u", List.of("One")), new byte[]{1});
+
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        Room room = gm.getAllRoomsSnapshot().get(host.code());
+        gm.startGame("s1", 5, 30);
+        String token = room.getImageToken();
+        assertNotNull(gm.animeIdForToken(token));
+
+        gm.leaveRoom("s1"); // last player out, room is discarded
+
+        assertNull(gm.animeIdForToken(token));
     }
 
     // Driven through startRound rather than startGame, because startGame deliberately
