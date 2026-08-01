@@ -284,3 +284,23 @@ socket is open are queued in `outboxRef` and flushed on `onopen`.
   `state.screen` in `App.tsx` and read/write exclusively through `useGame()`
   (`state`, `send`, `backToLobby`, `leaveLobby`) — no other prop drilling or global
   state.
+
+### Visual design
+
+A party-game look on a deep violet canvas, built around one idea: **anything pressable
+looks pressable.** Buttons and pills carry a darker bottom lip (`--lip`) and translate
+down onto it on `:active`. That is the whole signature — everything else stays quiet, so
+resist adding more decoration.
+
+All colour and spacing comes from custom properties at the top of `styles.css`; use those
+rather than new literals. Button variants are `.go` (mint, confirm) and `.quiet` (text
+only) — note `.quiet` is tuned for the dark canvas and is overridden inside `.panel`,
+where the background is cream.
+
+Fonts are **bundled via `@fontsource`, latin subsets only**, not loaded from a CDN. That
+keeps the deployed game a single origin with no third-party requests, matching the
+backend. Importing the non-subset entrypoints pulls in Cyrillic, Greek and Vietnamese too
+and roughly triples the font payload.
+
+`GameScreen` remembers the round length in a ref because state only carries the deadline,
+not the duration; the draining timer bar is measured against it.

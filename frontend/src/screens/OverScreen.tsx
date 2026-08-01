@@ -9,24 +9,29 @@ export default function OverScreen() {
 
   return (
     <div className="center">
-      <h1>Game Over</h1>
-      {state.winner && <div className="winner">🏆 {state.winner} wins!</div>}
+      <div className="panel stack">
+        <div>
+          <div className="trophy">🏆</div>
+          <div className="winner">{state.winner ? state.winner + " wins" : "Game over"}</div>
+        </div>
 
-      <table className="scores">
-        <tbody>
-          {standings.map((r) => (
-            <tr key={r.id}>
-              <td>
+        <ul className="standings">
+          {standings.map((r, i) => (
+            <li key={r.id} className={i === 0 ? "first" : ""}>
+              <span className="rank">{i + 1}</span>
+              <span>
                 {r.name}
                 {r.id === state.playerId ? " (you)" : ""}
-              </td>
-              <td className="score">{r.score}</td>
-            </tr>
+              </span>
+              <span className="points">{r.score}</span>
+            </li>
           ))}
-        </tbody>
-      </table>
+        </ul>
 
-      <button onClick={backToLobby}>Back to Lobby</button>
+        <button className="go wide" onClick={backToLobby}>
+          Back to lobby
+        </button>
+      </div>
     </div>
   );
 }
