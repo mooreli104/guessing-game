@@ -7,11 +7,21 @@ import io.javalin.http.staticfiles.Location;
 
 public class App {
 
+    /**
+     * The raw shape POST /feedback accepts. Kept separate from {@link Feedback} so the
+     * unvalidated request body and the bounded value that reaches the database are
+     * different types, and the only way between them is {@code Feedback.from}. Every
+     * field is nullable: this is whatever the network sent.
+     */
+    public record FeedbackForm(String kind, String message, String contact) {}
+
     /** Hosting platforms tell the process which port to bind; 7070 is the local default. */
     private static final int PORT = port();
 
     public static void main(String[] args) {
-        AnimeRepository repository = new PostgresAnimeRepository(new Db());
+        Db db = new Db();
+        AnimeRepository repository = new PostgresAnimeRepository(db);
+        FeedbackRepository feedback = new PostgresFeedbackRepository(db);
         WsRouter router = new WsRouter(repository);
         GameManager games = router.getGameManager();
 
@@ -41,6 +51,19 @@ public class App {
                 // keep it rather than re-fetching the cover on every render.
                 ctx.header("Cache-Control", "private, max-age=3600, immutable");
                 ctx.contentType("image/jpeg").result(bytes);
+            });
+            // Open, unauthenticated, and it writes a row -- so every field is bounded in
+            // Feedback.from before it reaches the database, and nothing here renders the
+            // text back to anyone. Still unthrottled; see Security notes in CLAUDE.md.
+            config.routes.post("/feedback", ctx -> {
+                FeedbackForm form = ctx.bodyValidator(FeedbackForm.class).get();
+                Feedback submitted = Feedback.from(form.kind(), form.message(), form.contact());
+                if (submitted == null) {
+                    ctx.status(400).json(Map.of("error", "Message is required"));
+                    return;
+                }
+                feedback.save(submitted);
+                ctx.status(201).json(Map.of("status", "received"));
             });
             config.routes.ws("/websocket/game", ws -> {
                 ws.onConnect(router::onConnect);

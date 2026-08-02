@@ -146,6 +146,10 @@ Still open:
 - **`JOIN_ROOM` is unthrottled**, so room codes remain brute-forceable given enough
   attempts even though they are now unpredictable. A rate limit per session is the fix if
   this ever matters.
+- **`POST /feedback` is unthrottled too**, and unlike `JOIN_ROOM` it writes a row. Field
+  lengths are bounded in `Feedback.from`, so a single request cannot be large, but nothing
+  stops a script sending many. A per-IP cooldown is the fix. Nothing renders the stored
+  text, so it is a spam problem rather than an injection one.
 - **No connection pool.** Each round opens a couple of fresh `DriverManager` connections.
   Fine at party-game scale; see the concurrency section for why it is worth knowing about.
 - **The static file handler sets no security headers** (CSP and friends).
@@ -226,6 +230,21 @@ who polled it. `getAllRoomsSnapshot()` remains as a test accessor.
   retries once, on the grounds that repeats beat a dead round. That is reachable now
   that difficulty can narrow the pool to a few hundred rows, and it wipes the whole
   history at once rather than ageing out the oldest entry.
+
+### Feedback
+
+`POST /feedback` takes `{kind, message, contact}` and writes a row to the `feedback`
+table. `App.FeedbackForm` is the raw request shape and `Feedback` is the bounded value
+that reaches the database; the only way between them is `Feedback.from`, which trims,
+caps `message` at 2000 and `contact` at 200, coerces an unknown `kind` to `FEEDBACK`, and
+returns null for an empty message (answered as 400). The `maxLength` attributes in
+`FeedbackModal` are a convenience, exactly like `HomeScreen`'s username cap — the endpoint
+is open and anything can call it directly.
+
+Read it with `SELECT kind, message, contact, created_at FROM feedback ORDER BY id DESC;`.
+
+Nothing renders the stored text back to anyone, so it is not an injection route. It is
+also not rate limited — see Security notes.
 
 ### Difficulty: the popularity rank
 

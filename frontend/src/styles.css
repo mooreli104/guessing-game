@@ -275,6 +275,62 @@ input:disabled {
   text-align: center;
 }
 
+/* --- Feedback ------------------------------------------------------------ */
+
+.footer {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(16 6 34 / 70%);
+  overflow-y: auto;
+}
+
+.modal {
+  width: min(460px, 100%);
+  text-align: left;
+}
+
+/* Inherits the input border/focus treatment so the two fields match. */
+textarea {
+  font-family: Nunito, sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ink);
+  width: 100%;
+  padding: 13px 16px;
+  background: #fff;
+  border: 3px solid #e5d9ee;
+  border-radius: 14px;
+  outline: none;
+  resize: vertical;
+  transition: border-color 120ms ease;
+}
+
+textarea::placeholder {
+  color: #b3a6c6;
+  font-weight: 600;
+}
+
+textarea:focus {
+  border-color: var(--punch);
+}
+
+.counter {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-align: right;
+}
+
 .reconnecting {
   color: var(--cream);
   text-align: center;

@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useGame } from "../GameContext";
+import FeedbackModal from "../FeedbackModal";
 
 export default function HomeScreen() {
   const { send } = useGame();
   const [username, setUsername] = useState("");
   const [code, setCode] = useState("");
   const [hint, setHint] = useState("");
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   function createRoom() {
     if (!username.trim()) return setHint("Pick a name first");
@@ -62,6 +64,14 @@ export default function HomeScreen() {
 
         <div className="hint">{hint}</div>
       </div>
+
+      <div className="footer">
+        <button className="quiet" onClick={() => setFeedbackOpen(true)}>
+          Leave any feedback
+        </button>
+      </div>
+
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </div>
   );
 }

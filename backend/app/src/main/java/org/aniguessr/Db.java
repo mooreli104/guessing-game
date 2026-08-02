@@ -155,4 +155,23 @@ public class Db {
             throw new RuntimeException("Could not create the anime table", e);
         }
     }
+
+    public void createFeedbackTable() {
+        // Deliberately no foreign key to anything: feedback arrives from anyone who has
+        // the page open, whether or not they were ever in a room.
+        String sql = """
+            CREATE TABLE IF NOT EXISTS feedback (
+              id         BIGSERIAL   PRIMARY KEY,
+              kind       TEXT        NOT NULL,
+              message    TEXT        NOT NULL,
+              contact    TEXT        NOT NULL DEFAULT '',
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """;
+        try (Connection conn = connection(); Statement st = conn.createStatement()) {
+            st.execute(sql);
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not create the feedback table", e);
+        }
+    }
 }
