@@ -532,3 +532,42 @@ and roughly triples the font payload.
 
 `GameScreen` remembers the round length in a ref because state only carries the deadline,
 not the duration; the draining timer bar is measured against it.
+
+### The document head, and the two static pages
+
+`frontend/index.html` carries the Open Graph / Twitter tags, the meta description, the
+canonical and a `VideoGame` JSON-LD block. Alongside it in `frontend/public/` sit
+`robots.txt`, `sitemap.xml`, `og.png` and `how-to-play.html`. Four things are load-bearing:
+
+- **Every URL in the tags is absolute** against `https://otakuguessr.com`. A relative
+  `og:image` is the usual reason a shared link renders as a blank rectangle; unlike the
+  runtime, which derives everything from `window.location.origin`, a crawler has no
+  origin to resolve against. Changing the domain means editing these by hand.
+- **`og.png` is generated, not drawn.** `frontend/scripts/og-image.py` builds the 1200×630
+  card with PIL and is run by hand; the PNG is committed so deployment needs no Python.
+  It reads the **`.woff`** files from `node_modules/@fontsource`, never the `.woff2`
+  beside them — WOFF1 is zlib, which fontTools flattens to TTF with no extra dependency,
+  while WOFF2 needs `brotli`, which is not installed. Colours are copied from
+  `styles.css`, which stays the source of truth.
+- **`index.html` and `how-to-play.html` each carry inline critical CSS, duplicating a few
+  values from `styles.css`.** That is deliberate, and the exception to the duplication
+  rule above: `styles.css` is imported from `main.tsx` and ships inside the hash-named
+  bundle, so neither the pre-JS fallback inside `#root` nor a plain static page can reach
+  it. Without the inline block the fallback flashes black-on-white, which is worse than
+  the blank screen it replaces.
+- **The `.html` in `/how-to-play.html` is not laziness.** As `how-to-play/index.html` the
+  page resolves at `/how-to-play` under Javalin, whose `JettyResourceHandler.getResource`
+  falls back to `"$path/index.html"` — but *not* under the Vite preview server, whose SPA
+  fallback answers the extension-less path with the app's own `index.html`. A flat file is
+  an exact match under both. Do not "tidy" the extension away without testing `npm run
+  preview`, not just the deployed server.
+
+The fallback markup inside `#root` uses `boot-` prefixed class names so the inline styles
+cannot collide with the app's stylesheet once it loads. React clears the container on
+mount, so it costs a real visitor nothing.
+
+Note what this does **not** do: the tags earn the branded query and correct previews
+wherever a link is pasted. They do not rank the site for competitive terms — that is
+content and inbound links, which is why `how-to-play.html` exists at all. Hidden-keyword
+text and crawler-only pages were considered and rejected: hidden text is discounted rather
+than counted, and cloaking is what draws a manual action on the domain.
