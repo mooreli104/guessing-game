@@ -5,10 +5,131 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Without this the browser requests /favicon.ico on every load and logs a 404. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>OtakuGuessr</title>
+
+    <title>OtakuGuessr — guess the anime from its cover</title>
+    <meta
+      name="description"
+      content="A party game for a call with friends. The anime title is scrubbed off the cover — race to type it first. Make a room, share the 4-character code, play in the browser."
+    />
+    <link rel="canonical" href="https://otakuguessr.com/" />
+    <!-- Discord draws the stripe down the left edge of an embed from this. --grape-deep. -->
+    <meta name="theme-color" content="#241245" />
+
+    <!-- Open Graph. Every URL here must be absolute: a relative og:image is the usual
+         reason a shared link renders as a blank rectangle. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OtakuGuessr" />
+    <meta property="og:url" content="https://otakuguessr.com/" />
+    <meta property="og:title" content="OtakuGuessr — guess the anime from its cover" />
+    <meta
+      property="og:description"
+      content="A party game for a call with friends. The anime title is scrubbed off the cover — race to type it first. Make a room, share the 4-character code, play in the browser."
+    />
+    <meta property="og:image" content="https://otakuguessr.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The OtakuGuessr wordmark beside an anime cover with its title blanked out."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "OtakuGuessr",
+        "url": "https://otakuguessr.com/",
+        "image": "https://otakuguessr.com/og.png",
+        "description": "A party game for a call with friends. The anime title is scrubbed off the cover — race to type it first. Make a room, share the 4-character code, play in the browser.",
+        "applicationCategory": "Game",
+        "genre": "Quiz",
+        "playMode": "MultiPlayer",
+        "gamePlatform": "Web browser",
+        "operatingSystem": "Any",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
+
+    <style>
+      /* Critical CSS for the pre-JS frame below, and nothing more.
+
+         src/styles.css is the source of truth for these values, but it is imported from
+         main.tsx and ships inside the hash-named bundle -- so it does not exist yet and
+         cannot style the fallback. Without this the fallback flashes black-on-white,
+         which is worse than the blank screen it replaces.
+
+         Class names are prefixed `boot-` so none of it can collide with the app's
+         stylesheet once that loads. The webfonts arrive with the bundle too, hence the
+         system stack here. */
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 50% 0%, #552d9c 0%, transparent 60%),
+          #241245;
+        background-attachment: fixed;
+      }
+
+      .boot {
+        max-width: 520px;
+        margin: 0 auto;
+        padding: 96px 16px 40px;
+        text-align: center;
+        font-family: system-ui, sans-serif;
+      }
+
+      .boot-wordmark {
+        margin: 0;
+        font-size: clamp(40px, 12vw, 62px);
+        font-weight: 800;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        color: #fff6ec;
+        text-shadow: 0 4px 0 #170b2e;
+      }
+
+      .boot-wordmark span {
+        color: #ffc93c;
+      }
+
+      .boot p {
+        color: #c9b8e8;
+        font-weight: 700;
+        font-size: 15px;
+        line-height: 1.5;
+        margin: 6px 0 0;
+      }
+
+      .boot-blurb {
+        margin-top: 18px;
+        font-weight: 400;
+      }
+
+      .boot a {
+        color: #ffc93c;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- React clears this container on mount, so what follows lives only until the bundle
+         boots. It is here so a crawler that does not run JavaScript -- and a visitor on a
+         slow connection -- gets the game's name and what it is, rather than an empty page. -->
+    <div id="root">
+      <div class="boot">
+        <h1 class="boot-wordmark">Otaku<span>Guessr</span></h1>
+        <p>The title is scrubbed off the cover. Type it first.</p>
+        <p class="boot-blurb">
+          A party game for a call with friends. The anime title is scrubbed off the cover —
+          race to type it first. Make a room, share the 4-character code, play in the
+          browser. <a href="/how-to-play.html">How to play</a>
+        </p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
