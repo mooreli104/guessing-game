@@ -69,6 +69,10 @@ export default function HomeScreen() {
         <button className="quiet" onClick={() => setFeedbackOpen(true)}>
           Leave any feedback
         </button>
+        {/* A real link, not a route: this is a static page outside the SPA, and it is what
+            makes that page discoverable to a crawler. The .html is deliberate -- see the
+            comment in public/how-to-play.html. */}
+        <a href="/how-to-play.html">How to play</a>
       </div>
 
       {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
