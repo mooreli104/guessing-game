@@ -24,7 +24,7 @@ export default function HomeScreen() {
     <div className="center">
       <div className="wordmark">
         <h1>
-          Ani<span>Guessr</span>
+          Otaku<span>Guessr</span>
         </h1>
         <div className="tagline">The title is scrubbed off the cover. Type it first.</div>
       </div>

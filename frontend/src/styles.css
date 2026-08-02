@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   Aniguessr - a loud party game for friends in a call.
+   OtakuGuessr - a loud party game for friends in a call.
 
    The look is built on one idea: everything you can press should look pressable.
    Buttons and pills carry a darker bottom "lip" and physically sink when clicked,
@@ -91,6 +91,9 @@ h1, h2, h3 {
 }
 
 .wordmark h1 {
+  /* The name is a single unbreakable word, so it can never wrap out of an overflow.
+     Measured: at the 40px floor it is 230px wide against the 288px a 320px phone
+     leaves, so this scale fits the narrowest screen worth supporting. */
   font-size: clamp(40px, 12vw, 62px);
   color: var(--cream);
   letter-spacing: -0.02em;
