@@ -219,9 +219,13 @@ who polled it. `getAllRoomsSnapshot()` remains as a test accessor.
   `MAL_CLIENT_ID` and there is no fallback — see Security notes.
 - Round timing (`ROUND_ACTIVE` duration, the post-answer reveal pause) is driven by
   a shared `ScheduledExecutorService` in `GameManager`, not per-room threads.
-- `Room` tracks `usedAnimeIds` so an anime never repeats within a game. `startGame`
-  clears it; if the pool runs dry mid-game `startRound` clears it and retries once,
-  on the grounds that repeats beat a dead round.
+- `Room` tracks `usedAnimeIds` so an anime never repeats **for the life of the room**,
+  not just within one game. `startGame` deliberately does not clear it — it used to, so
+  a lobby hitting "play again" could be handed the cover it had just guessed. The only
+  thing that empties the set is `startRound`, when the pool runs dry: it clears and
+  retries once, on the grounds that repeats beat a dead round. That is reachable now
+  that difficulty can narrow the pool to a few hundred rows, and it wipes the whole
+  history at once rather than ageing out the oldest entry.
 
 ### Concurrency: the room lock
 

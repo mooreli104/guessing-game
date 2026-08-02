@@ -246,7 +246,10 @@ public class GameManager {
             room.setTotalRounds(Math.max(1, rounds));
             room.setRoundSeconds(Math.max(5, roundSeconds));
             room.setRound(1);
-            room.clearUsedAnime();
+            // usedAnimeIds is deliberately NOT cleared here: it lives as long as the room,
+            // so a lobby that plays again does not get handed a cover it has already seen.
+            // startRound still clears it if the pool runs dry, which is the only way the
+            // set is ever emptied.
             for (Player p : room.getPlayers().values()) p.resetScore();
         }
         startRound(room);
