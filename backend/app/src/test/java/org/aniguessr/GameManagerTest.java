@@ -262,7 +262,7 @@ class GameManagerTest {
         String code = gm.createRoom("Alice", "s1").code();
         gm.joinRoom("Bob", code, "s2");
 
-        gm.startGame("s2", 3, 20); // Bob is not the host
+        gm.startGame("s2", 3, 20, "NORMAL"); // Bob is not the host
 
         assertEquals("ERROR", sender.lastTo("s2").get("type"));
         assertEquals(GameState.LOBBY, gm.getAllRoomsSnapshot().get(code).getState());
@@ -270,7 +270,7 @@ class GameManagerTest {
 
     @Test
     void startGame_unknownSession_isNoOp() {
-        assertDoesNotThrow(() -> gm.startGame("nobody", 1, 5));
+        assertDoesNotThrow(() -> gm.startGame("nobody", 1, 5, "NORMAL"));
     }
 
     @Test
@@ -283,7 +283,7 @@ class GameManagerTest {
 
         // Restarting mid-game used to orphan the running round's timer, which then fired
         // and cut the new round short -- and it reset everyone's scores on the way.
-        gm.startGame("s1", 3, 30);
+        gm.startGame("s1", 3, 30, "NORMAL");
 
         assertEquals("ERROR", sender.lastTo("s1").get("type"));
         assertEquals("ALREADY_STARTED", sender.lastTo("s1").get("code"));
@@ -419,7 +419,7 @@ class GameManagerTest {
     @Test
     void startGame_withEmptyPool_sendsErrorAndStaysInLobby() {
         GameManager.JoinResult host = gm.createRoom("Alice", "s1");
-        gm.startGame("s1", 3, 30);
+        gm.startGame("s1", 3, 30, "NORMAL");
 
         Map<String, Object> last = sender.lastTo("s1");
         assertEquals("ERROR", last.get("type"));
@@ -433,7 +433,7 @@ class GameManagerTest {
             List.of("Fullmetal Alchemist")), new byte[]{1, 2, 3});
 
         GameManager.JoinResult host = gm.createRoom("Alice", "s1");
-        gm.startGame("s1", 1, 30);
+        gm.startGame("s1", 1, 30, "NORMAL");
 
         Room room = gm.getAllRoomsSnapshot().get(host.code());
         assertEquals(GameState.ROUND_ACTIVE, room.getState());
@@ -468,7 +468,7 @@ class GameManagerTest {
 
         GameManager.JoinResult host = gm.createRoom("Alice", "s1");
         Room room = gm.getAllRoomsSnapshot().get(host.code());
-        gm.startGame("s1", 2, 30);
+        gm.startGame("s1", 2, 30, "NORMAL");
         String first = room.getImageToken();
 
         gm.startRound(room); // the next round mints a new handle
@@ -485,7 +485,7 @@ class GameManagerTest {
 
         GameManager.JoinResult host = gm.createRoom("Alice", "s1");
         Room room = gm.getAllRoomsSnapshot().get(host.code());
-        gm.startGame("s1", 5, 30);
+        gm.startGame("s1", 5, 30, "NORMAL");
         String token = room.getImageToken();
         assertNotNull(gm.animeIdForToken(token));
 
@@ -494,8 +494,8 @@ class GameManagerTest {
         assertNull(gm.animeIdForToken(token));
     }
 
-    // Driven through startRound rather than startGame, because startGame deliberately
-    // clears the used set — a fresh game is entitled to the whole pool again.
+    // Driven through startRound rather than startGame so the used set can be seeded
+    // directly; startGame no longer clears it, since it lives as long as the room.
     @Test
     void startRound_whenPoolExhausted_clearsUsedAndRetries() {
         repo.save(new Anime(1, "u", List.of("Only Anime")), new byte[]{1});
@@ -510,5 +510,64 @@ class GameManagerTest {
 
         assertEquals(GameState.ROUND_ACTIVE, room.getState());
         assertEquals(1, room.getAnime().getId());
+    }
+
+    // ---- difficulty ----
+
+    @Test
+    void rankCapFor_mapsNamesAndFallsBackToNormal() {
+        assertEquals(GameManager.EASY_MAX_RANK, GameManager.rankCapFor("EASY"));
+        assertEquals(GameManager.NORMAL_MAX_RANK, GameManager.rankCapFor("NORMAL"));
+        assertEquals(Integer.MAX_VALUE, GameManager.rankCapFor("HARD"));
+        assertEquals(GameManager.EASY_MAX_RANK, GameManager.rankCapFor("easy"));
+
+        // A client that sends nothing, or something unknown, gets a playable game rather
+        // than an error — WsRouter passes the field through without validating it.
+        assertEquals(GameManager.NORMAL_MAX_RANK, GameManager.rankCapFor(null));
+        assertEquals(GameManager.NORMAL_MAX_RANK, GameManager.rankCapFor("WHATEVER"));
+    }
+
+    @Test
+    void startGame_onEasy_neverPicksAnimeOutsideTheRankCap() {
+        repo.save(new Anime(1, "u", List.of("Well Known"), 10), new byte[]{1});
+        repo.save(new Anime(2, "u", List.of("Obscure"), GameManager.EASY_MAX_RANK + 1), new byte[]{2});
+
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        gm.startGame("s1", 1, 30, "EASY");
+
+        Room room = gm.getAllRoomsSnapshot().get(host.code());
+        assertEquals(GameManager.EASY_MAX_RANK, room.getMaxRank());
+        assertEquals(1, room.getAnime().getId());
+    }
+
+    @Test
+    void startGame_onHard_canReachTheWholePool() {
+        repo.save(new Anime(2, "u", List.of("Obscure"), 50_000), new byte[]{2});
+
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        gm.startGame("s1", 1, 30, "HARD");
+
+        Room room = gm.getAllRoomsSnapshot().get(host.code());
+        assertEquals(GameState.ROUND_ACTIVE, room.getState());
+        assertEquals(2, room.getAnime().getId());
+    }
+
+    // The whole point of the change: a lobby that plays again must not be handed a cover
+    // it has already guessed. startGame used to clear the used set.
+    @Test
+    void startGame_keepsUsedAnimeAcrossGamesInTheSameRoom() {
+        repo.save(new Anime(1, "u", List.of("Only Anime")), new byte[]{1});
+
+        GameManager.JoinResult host = gm.createRoom("Alice", "s1");
+        Room room = gm.getAllRoomsSnapshot().get(host.code());
+        gm.startGame("s1", 1, 30, "NORMAL");
+        assertTrue(room.getUsedAnimeIds().contains(1));
+
+        room.setState(GameState.LOBBY); // back to the lobby, as after GAME_OVER
+        gm.startGame("s1", 1, 30, "NORMAL");
+
+        // Still marked used. The pool holds exactly one anime, so the dry-pool retry in
+        // startRound is what serves this round -- not a cleared set.
+        assertTrue(room.getUsedAnimeIds().contains(1));
     }
 }

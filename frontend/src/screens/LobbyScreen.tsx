@@ -1,5 +1,12 @@
 import { useState } from "react";
 import { useGame } from "../GameContext";
+import type { Difficulty } from "../types";
+
+const DIFFICULTIES: { value: Difficulty; label: string; blurb: string }[] = [
+  { value: "EASY", label: "Easy", blurb: "The best-known anime" },
+  { value: "NORMAL", label: "Normal", blurb: "A wider net" },
+  { value: "HARD", label: "Hard", blurb: "Anything in the pool" },
+];
 
 // The settings fields hold strings, not numbers, and are only clamped once the user
 // leaves them. Two bugs came out of doing it the other way round:
@@ -21,6 +28,7 @@ export default function LobbyScreen() {
   const { state, send, leaveLobby } = useGame();
   const [rounds, setRounds] = useState("3");
   const [seconds, setSeconds] = useState("30");
+  const [difficulty, setDifficulty] = useState<Difficulty>("NORMAL");
   const [copied, setCopied] = useState(false);
 
   const isHost = state.host === state.playerId;
@@ -32,6 +40,7 @@ export default function LobbyScreen() {
       type: "START_GAME",
       rounds: Number(clamp(rounds, 1)),
       roundSeconds: Number(clamp(seconds, 5)),
+      difficulty,
     });
   }
 
@@ -94,6 +103,25 @@ export default function LobbyScreen() {
                   onChange={(e) => setSeconds(e.target.value)}
                   onBlur={() => setSeconds(clamp(seconds, 5))}
                 />
+              </div>
+            </div>
+
+            <div>
+              <div className="field-label">Difficulty</div>
+              <div className="difficulty">
+                {DIFFICULTIES.map((d) => (
+                  <button
+                    key={d.value}
+                    className={d.value === difficulty ? "pick on" : "pick"}
+                    onClick={() => setDifficulty(d.value)}
+                    aria-pressed={d.value === difficulty}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <div className="hint">
+                {DIFFICULTIES.find((d) => d.value === difficulty)?.blurb}
               </div>
             </div>
 

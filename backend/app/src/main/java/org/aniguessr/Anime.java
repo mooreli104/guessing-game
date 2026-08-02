@@ -6,6 +6,15 @@ public class Anime {
     private final int id;
     private final String url;
     private final List<String> titles;
+    /**
+     * Position in MyAnimeList's by-popularity ranking, 1 being the most watched. This is
+     * the difficulty axis: a low rank is something players have plausibly heard of.
+     *
+     * Zero means "unranked", which is what the constructors without a rank produce. Every
+     * row a real ingest writes has a rank of 1 or more, so zero only shows up in tests --
+     * where it conveniently passes any {@code rank <= n} filter.
+     */
+    private final int rank;
 
     public Anime() {
         this(0, "", List.of());
@@ -16,13 +25,19 @@ public class Anime {
     }
 
     public Anime(int id, String url, List<String> titles) {
+        this(id, url, titles, 0);
+    }
+
+    public Anime(int id, String url, List<String> titles, int rank) {
         this.id = id;
         this.url = url;
         this.titles = List.copyOf(titles);
+        this.rank = rank;
     }
 
     public int getId() { return id; }
     public String getUrl() { return url; }
+    public int getRank() { return rank; }
 
     /** Immutable: the answer must not be editable by whoever holds a reference to it. */
     public List<String> getTitles() { return titles; }

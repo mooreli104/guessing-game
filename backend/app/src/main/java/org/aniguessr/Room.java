@@ -23,6 +23,9 @@ public class Room {
     private int round;
     private int totalRounds;
     private int roundSeconds;
+    // Worst MAL popularity rank a round may draw from -- the difficulty the host chose,
+    // already resolved to a number by GameManager. Integer.MAX_VALUE means the whole pool.
+    private int maxRank;
     private long roundStartMillis;
     private Anime anime;
     // Opaque public handle for the current round's cover. Deliberately not the anime id:
@@ -42,6 +45,7 @@ public class Room {
         this.round = 1;
         this.totalRounds = 0;
         this.roundSeconds = 0;
+        this.maxRank = Integer.MAX_VALUE;
         this.roundStartMillis = 0;
         this.anime = new Anime();
         this.guessedCorrectly = new HashSet<>();
@@ -60,6 +64,8 @@ public class Room {
     public void setTotalRounds(int totalRounds) { this.totalRounds = totalRounds; }
     public int getRoundSeconds() { return roundSeconds; }
     public void setRoundSeconds(int roundSeconds) { this.roundSeconds = roundSeconds; }
+    public int getMaxRank() { return maxRank; }
+    public void setMaxRank(int maxRank) { this.maxRank = maxRank; }
     public long getRoundStartMillis() { return roundStartMillis; }
     public void setRoundStartMillis(long roundStartMillis) { this.roundStartMillis = roundStartMillis; }
     public Anime getAnime() { return this.anime; }

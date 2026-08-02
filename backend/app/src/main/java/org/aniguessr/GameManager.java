@@ -219,7 +219,27 @@ public class GameManager {
 
     // ---- the round lifecycle ----------------------------------------------------------
 
-    public void startGame(String sessionId, int rounds, int roundSeconds) {
+    /**
+     * Difficulty arrives as a name and is turned into a rank cap here, on the server.
+     * The client never sends a number: thresholds can then be retuned without shipping a
+     * new bundle, and no client can ask for an arbitrary slice of the pool.
+     *
+     * The ranks are MyAnimeList's by-popularity positions, so "easy" is roughly the three
+     * hundred most-watched anime. Anything unrecognised falls to normal.
+     */
+    static int rankCapFor(String difficulty) {
+        if (difficulty == null) return NORMAL_MAX_RANK;
+        return switch (difficulty.toUpperCase()) {
+            case "EASY" -> EASY_MAX_RANK;
+            case "HARD" -> Integer.MAX_VALUE;
+            default -> NORMAL_MAX_RANK;
+        };
+    }
+
+    static final int EASY_MAX_RANK = 300;
+    static final int NORMAL_MAX_RANK = 900;
+
+    public void startGame(String sessionId, int rounds, int roundSeconds, String difficulty) {
         Room room = roomFor(sessionId);
         if (room == null) return;
         String playerId = sessionToPlayer.get(sessionId);
@@ -245,6 +265,7 @@ public class GameManager {
             if (room.getState() != GameState.LOBBY) return; // lost the race to another start
             room.setTotalRounds(Math.max(1, rounds));
             room.setRoundSeconds(Math.max(5, roundSeconds));
+            room.setMaxRank(rankCapFor(difficulty));
             room.setRound(1);
             // usedAnimeIds is deliberately NOT cleared here: it lives as long as the room,
             // so a lobby that plays again does not get handed a cover it has already seen.
@@ -258,18 +279,21 @@ public class GameManager {
     // Package-private so tests can drive a single round without going through startGame.
     void startRound(Room room) {
         Set<Integer> used;
+        int maxRank;
         synchronized (room) {
             used = room.getUsedAnimeIds();
+            maxRank = room.getMaxRank();
         }
 
         // Both picks happen outside the room lock -- they hit the database.
-        Anime anime = pick(used);
+        Anime anime = pick(used, maxRank);
         if (anime == null && !used.isEmpty()) {
-            // More rounds were asked for than there are anime. Repeats beat a dead round.
+            // Everything inside the difficulty has been shown. Repeats beat a dead round,
+            // and a narrow difficulty makes this reachable in a long-lived lobby.
             synchronized (room) {
                 room.clearUsedAnime();
             }
-            anime = pick(Set.of());
+            anime = pick(Set.of(), maxRank);
         }
         if (anime == null) {
             broadcast(room, error("NO_ANIME", "Could not load anime, try again"));
@@ -294,9 +318,9 @@ public class GameManager {
         }
     }
 
-    private Anime pick(Set<Integer> used) {
+    private Anime pick(Set<Integer> used, int maxRank) {
         try {
-            return repository.randomExcluding(used);
+            return repository.randomExcluding(used, maxRank);
         } catch (RuntimeException ex) {
             return null;
         }

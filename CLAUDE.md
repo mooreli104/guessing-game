@@ -211,9 +211,9 @@ who polled it. `getAllRoomsSnapshot()` remains as a test accessor.
   `PostgresAnimeRepository` implements it with plain JDBC; `FakeAnimeRepository` in the
   test source set is the in-memory double, mirroring the `SessionSender` /
   `RecordingSender` split. `Db` owns the JDBC URL and creates the table.
-  `randomExcluding` deliberately does not select the image column — starting a round
-  should move a few hundred bytes, with the picture travelling separately through
-  `GET /image/{token}`.
+  `randomExcluding(usedIds, maxRank)` deliberately does not select the image column —
+  starting a round should move a few hundred bytes, with the picture travelling
+  separately through `GET /image/{token}`. `maxRank` is the difficulty cap; see below.
 - **`MalClient`** is used **only by ingest**, never in the round path. `fetchPage(offset,
   limit)` reads a page of the MAL ranking synchronously. The client ID comes from
   `MAL_CLIENT_ID` and there is no fallback — see Security notes.
@@ -226,6 +226,38 @@ who polled it. `getAllRoomsSnapshot()` remains as a test accessor.
   retries once, on the grounds that repeats beat a dead round. That is reachable now
   that difficulty can narrow the pool to a few hundred rows, and it wipes the whole
   history at once rather than ageing out the oldest entry.
+
+### Difficulty: the popularity rank
+
+Every anime carries `rank`, its position in MyAnimeList's **by-popularity** ranking (1 =
+most watched). That column is the only difficulty axis.
+
+**Ingest asks for `ranking_type=bypopularity`, not `ranking_type=all`.** The `all` ranking
+sorts by weighted score, and past the first few hundred entries that is mostly high-rated
+OVAs, specials and sequels-of-sequels — adored by few, recognised by fewer, and hopeless
+to guess from a cover. It made the whole game feel obscure regardless of pool size. The
+rank stored is the one MAL returns in `entry.ranking.rank`, not a locally counted index,
+so entries skipped for having no large picture do not shift everything after them.
+
+`GameManager.rankCapFor` turns a difficulty name into a cap: `EASY` 300, `NORMAL` 900,
+`HARD` unbounded. **The client sends the name, never a number** — thresholds can then be
+retuned without shipping a new bundle, and no client can request an arbitrary slice of the
+pool. Anything unknown or absent falls back to normal, so a client that sends no
+difficulty still gets a playable game.
+
+Two things to know before touching this:
+
+- **Rank 0 means unranked and passes every cap.** Real ingested rows are always 1 or more;
+  0 is what the `Anime` constructors without a rank produce, which keeps tests that do not
+  care about difficulty from having to name one.
+- **`Db.createTable` needs both the `CREATE` and the `ALTER`.** `CREATE TABLE IF NOT
+  EXISTS` does nothing whatsoever to an existing table, so on any database ingested before
+  `rank` existed the column would silently never appear. The `ALTER TABLE ... ADD COLUMN
+  IF NOT EXISTS` is what actually migrates those.
+
+Changing the ranking type means the stored pool is the wrong pool — `TRUNCATE anime`
+before re-running ingest rather than just re-running it, since `existingIds()` would
+otherwise skip every row, and they would all sit at rank 0 and land in Easy.
 
 ### Concurrency: the room lock
 
@@ -420,6 +452,10 @@ The wire protocol is defined in two places that must be kept in sync manually:
 Message `type` values: `CREATE_ROOM`, `JOIN_ROOM`, `RESUME`, `START_GAME`, `GUESS`,
 `LEAVE_ROOM` (client→server); `ROOM_CREATED`, `ROOM_JOINED`, `ROOM_UPDATE`,
 `ROUND_START`, `GUESS_RESULT`, `ROUND_END`, `GAME_OVER`, `ERROR` (server→client).
+
+`START_GAME` carries `rounds`, `roundSeconds` and `difficulty` (`EASY` / `NORMAL` /
+`HARD`, typed as `Difficulty` in `types.ts`). The difficulty is a name rather than a rank
+number on purpose — see the difficulty section above.
 
 **`ERROR` carries a machine-readable `code` as well as a human `message`**, typed as
 `ErrorCode` in `types.ts`: `BAD_MESSAGE`, `ROOM_NOT_FOUND`, `SESSION_EXPIRED`,

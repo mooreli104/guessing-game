@@ -140,11 +140,17 @@ public class Db {
               titles      TEXT[]      NOT NULL,
               image       BYTEA       NOT NULL,
               source_url  TEXT        NOT NULL,
+              rank        INTEGER     NOT NULL DEFAULT 0,
               ingested_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
             """;
+        // CREATE TABLE IF NOT EXISTS does nothing at all to a table that already exists,
+        // so the rank column would never appear on a database ingested before it was
+        // added. Adding it separately is what actually migrates those.
+        String addRank = "ALTER TABLE anime ADD COLUMN IF NOT EXISTS rank INTEGER NOT NULL DEFAULT 0";
         try (Connection conn = connection(); Statement st = conn.createStatement()) {
             st.execute(sql);
+            st.execute(addRank);
         } catch (SQLException e) {
             throw new RuntimeException("Could not create the anime table", e);
         }

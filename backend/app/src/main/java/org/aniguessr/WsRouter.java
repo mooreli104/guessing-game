@@ -89,8 +89,11 @@ public class WsRouter implements SessionSender {
                 }
                 gameManager.resume(playerId, code, ctx.sessionId);
             }
+            // A missing or unknown difficulty is not an error: rankCapFor falls back to
+            // normal, which is what an older client that sends no difficulty at all wants.
             case "START_GAME" -> gameManager.startGame(
-                ctx.sessionId, intOr(node, "rounds", 3), intOr(node, "roundSeconds", 30));
+                ctx.sessionId, intOr(node, "rounds", 3), intOr(node, "roundSeconds", 30),
+                text(node, "difficulty"));
             case "GUESS" -> {
                 String guess = text(node, "guess");
                 if (guess == null) {

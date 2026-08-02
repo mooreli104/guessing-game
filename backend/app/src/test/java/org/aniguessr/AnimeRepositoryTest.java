@@ -53,7 +53,7 @@ class AnimeRepositoryTest {
         assertEquals(1, repo.count());
         assertArrayEquals(new byte[]{1, 2, 3}, repo.imageBytes(5114));
 
-        Anime got = repo.randomExcluding(Set.of());
+        Anime got = repo.randomExcluding(Set.of(), Integer.MAX_VALUE);
         assertEquals(5114, got.getId());
         assertEquals(List.of("Fullmetal Alchemist", "FMA"), got.getTitles());
         assertTrue(got.isCorrect("fullmetal alchemist"));
@@ -64,8 +64,24 @@ class AnimeRepositoryTest {
         repo.save(new Anime(1, "u", List.of("One")), new byte[]{1});
         repo.save(new Anime(2, "u", List.of("Two")), new byte[]{2});
 
-        assertEquals(2, repo.randomExcluding(Set.of(1)).getId());
-        assertNull(repo.randomExcluding(Set.of(1, 2)));
+        assertEquals(2, repo.randomExcluding(Set.of(1), Integer.MAX_VALUE).getId());
+        assertNull(repo.randomExcluding(Set.of(1, 2), Integer.MAX_VALUE));
+    }
+
+    @Test
+    void randomExcluding_honoursRankCap() {
+        repo.save(new Anime(1, "u", List.of("Well Known"), 10), new byte[]{1});
+        repo.save(new Anime(2, "u", List.of("Obscure"), 5000), new byte[]{2});
+
+        Anime easy = repo.randomExcluding(Set.of(), 300);
+        assertEquals(1, easy.getId());
+        assertEquals(10, easy.getRank());
+
+        // Nothing inside the cap once the only eligible anime is excluded.
+        assertNull(repo.randomExcluding(Set.of(1), 300));
+
+        // The obscure one is reachable with no cap.
+        assertEquals(2, repo.randomExcluding(Set.of(1), Integer.MAX_VALUE).getId());
     }
 
     @Test

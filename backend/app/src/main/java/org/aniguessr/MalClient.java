@@ -42,6 +42,16 @@ public class MalClient {
                     for (JsonNode entry : root.get("data")) {
                         JsonNode node = entry.get("node");
 
+                        // Position in the ranking we asked for, 1 being the most watched.
+                        // Stored so a round can be restricted to titles players have
+                        // plausibly heard of. Read from the response rather than counted
+                        // locally, so entries skipped below do not shift everything after
+                        // them. MAL always sends it; the fallback is only for safety.
+                        JsonNode ranking = entry.get("ranking");
+                        int rank = ranking == null || ranking.get("rank") == null
+                            ? 0
+                            : ranking.get("rank").asInt();
+
                         // Ask for the large picture: the scrubber's detector locates text
                         // far more reliably on it, and it displays better too.
                         JsonNode picture = node.get("main_picture");
@@ -69,7 +79,7 @@ public class MalClient {
                             }
                         }
 
-                        page.add(new Anime(id, url, titles));
+                        page.add(new Anime(id, url, titles, rank));
                     }
                     return page;
                 } catch (Exception e) {
@@ -80,11 +90,17 @@ public class MalClient {
     }
 
     // Synchronous: ingest is a batch job, and there is nothing to overlap it with.
+    //
+    // ranking_type is bypopularity, not all. The "all" ranking sorts by weighted score,
+    // which past the first few hundred entries is mostly high-rated OVAs, specials and
+    // sequels-of-sequels -- adored by few, recognised by fewer, and unguessable from a
+    // cover. Popularity sorts by member count, which is the "have people actually watched
+    // this" axis the game needs.
     public static List<Anime> fetchPage(int offset, int limit) throws Exception {
         HttpClient client = HttpClient.newBuilder().build();
 
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create("https://api.myanimelist.net/v2/anime/ranking?ranking_type=all"
+            .uri(URI.create("https://api.myanimelist.net/v2/anime/ranking?ranking_type=bypopularity"
                 + "&limit=" + limit + "&offset=" + offset
                 + "&fields=alternative_titles,main_picture"))
             .header("X-MAL-CLIENT-ID", clientId())

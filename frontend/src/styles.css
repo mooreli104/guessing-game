@@ -361,6 +361,39 @@ input:disabled {
   gap: 12px;
 }
 
+/* Three pills, one lit. Same bottom-lip trick as every other pressable thing --
+   the selected one simply sits down on its lip and stays there. */
+.difficulty {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.difficulty .pick {
+  width: 100%;
+  padding: 10px 6px;
+  font: inherit;
+  font-weight: 800;
+  color: var(--ink);
+  background: #efe6f7;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #ddd0e8;
+  transition: transform 0.03s ease;
+}
+
+.difficulty .pick.on {
+  background: var(--sun);
+  box-shadow: 0 3px 0 var(--sun-lip);
+}
+
+.difficulty .pick:active {
+  transform: translateY(3px);
+  box-shadow: none;
+}
+
 .waiting {
   text-align: center;
   font-weight: 800;

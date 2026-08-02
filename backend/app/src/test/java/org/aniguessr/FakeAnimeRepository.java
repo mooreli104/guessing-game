@@ -22,10 +22,12 @@ class FakeAnimeRepository implements AnimeRepository {
     }
 
     @Override
-    public Anime randomExcluding(Set<Integer> usedIds) {
+    public Anime randomExcluding(Set<Integer> usedIds, int maxRank) {
         List<Anime> available = new ArrayList<>();
         for (Anime a : anime.values()) {
-            if (!usedIds.contains(a.getId())) available.add(a);
+            // Anime built without a rank are rank 0, so they pass every cap. That keeps
+            // tests that do not care about difficulty from having to name one.
+            if (!usedIds.contains(a.getId()) && a.getRank() <= maxRank) available.add(a);
         }
         if (available.isEmpty()) return null;
         return available.get((int) (Math.random() * available.size()));

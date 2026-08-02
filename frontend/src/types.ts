@@ -4,12 +4,17 @@
 export type Player = { name: string; score: number };
 export type Players = Record<string, Player>;
 
+// How obscure a round may get. The client sends the name, never a number: the server maps
+// it to a MyAnimeList popularity rank cap in GameManager.rankCapFor, so the thresholds can
+// be retuned without shipping a new bundle.
+export type Difficulty = "EASY" | "NORMAL" | "HARD";
+
 // Messages this client sends to the server.
 export type ClientMsg =
   | { type: "CREATE_ROOM"; username: string }
   | { type: "JOIN_ROOM"; username: string; code: string }
   | { type: "RESUME"; playerId: string; code: string }
-  | { type: "START_GAME"; rounds: number; roundSeconds: number }
+  | { type: "START_GAME"; rounds: number; roundSeconds: number; difficulty: Difficulty }
   | { type: "GUESS"; guess: string }
   | { type: "LEAVE_ROOM" };
 
