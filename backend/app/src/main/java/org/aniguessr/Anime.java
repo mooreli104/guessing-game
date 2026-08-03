@@ -70,9 +70,20 @@ public class Anime {
     }
 
     // The base name of a title: the part before a subtitle. So the base of
-    // "Demon Slayer: Mugen Train" is "Demon Slayer".
+    // "Demon Slayer: Mugen Train" is "Demon Slayer". Runs on the raw title, before
+    // punctuation is stripped, because it depends on the ":" / " - " delimiter surviving.
     private String baseName(String title) {
         return title.split("\\s*:\\s*|\\s+-\\s+")[0].trim();
+    }
+
+    // Strips punctuation so a guess need not reproduce a title's apostrophes or
+    // exclamation marks: "jojos" matches "JoJo's Bizarre Adventure", and "yuri on ice"
+    // matches "Yuri!!! on Ice".
+    private String normalize(String s) {
+        return s.toLowerCase().trim()
+            .replaceAll("[^\\p{L}\\p{N}\\s]", "")
+            .replaceAll("\\s+", " ")
+            .trim();
     }
 
     // True when the guess is close enough to one title. As well as a fuzzy match on the
@@ -80,22 +91,22 @@ public class Anime {
     // it), so "demon slayer" is accepted for "Demon Slayer: Mugen Train" but the arc name
     // "mugen train" is not.
     private boolean matchesTitle(String answer, String guess) {
-        String a = answer.toLowerCase().trim();
-        String g = guess.toLowerCase().trim();
+        String a = normalize(answer);
+        String g = normalize(guess);
         if (a.isEmpty() || g.isEmpty()) return false;
 
         // Fuzzy match against the full title.
         if (distance(a, g) <= toleranceFor(a)) return true;
 
         // Partial matches are only allowed against the base name, never a subtitle.
-        String base = baseName(a);
+        String base = normalize(baseName(answer.toLowerCase().trim()));
         if (g.length() >= 5) {
             // Exact chunk of the base name (handles multi-word bases like "demon slayer").
             if (base.contains(g)) return true;
 
             // Fuzzy match against a single significant word of the base name, so a
             // keyword guess like "frieren" can have a typo too.
-            for (String word : base.split("[^a-z0-9]+")) {
+            for (String word : base.split(" ")) {
                 if (word.length() >= 5 && distance(word, g) <= toleranceFor(word)) return true;
             }
         }

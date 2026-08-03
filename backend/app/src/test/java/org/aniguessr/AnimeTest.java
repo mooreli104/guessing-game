@@ -70,6 +70,26 @@ class AnimeTest {
     }
 
     @Test
+    void isCorrect_ignoresApostropheInKeyword() {
+        Anime a = new Anime("u", List.of("JoJo's Bizarre Adventure"));
+        assertTrue(a.isCorrect("jojos"), "possessive apostrophe should not be required");
+        assertTrue(a.isCorrect("jojo's"), "typing the apostrophe still works");
+    }
+
+    @Test
+    void isCorrect_ignoresExclamationMarks() {
+        Anime a = new Anime("u", List.of("Yuri!!! on Ice"));
+        assertTrue(a.isCorrect("yuri on ice"), "punctuation-free guess should match");
+        assertTrue(a.isCorrect("Yuri!!! on Ice"), "exact punctuation still works");
+    }
+
+    @Test
+    void isCorrect_punctuationToleranceDoesNotAcceptWrongAnswer() {
+        Anime a = new Anime("u", List.of("Yuri!!! on Ice"));
+        assertFalse(a.isCorrect("bleach"));
+    }
+
+    @Test
     void isCorrect_matchesBaseNameButNotSubtitle() {
         Anime a = new Anime("u", List.of("Demon Slayer: Mugen Train"));
         assertTrue(a.isCorrect("demon slayer"), "base name is correct");
