@@ -282,6 +282,15 @@ input:disabled {
   margin-top: 16px;
 }
 
+/* Floated rather than in flow, like .offline, so it reaches every screen -- lobby and
+   game don't have a footer area of their own to put it in. */
+.feedback-fab {
+  position: fixed;
+  bottom: 10px;
+  right: 12px;
+  z-index: 10;
+}
+
 /* The how-to-play link sits beside the feedback button and should read the same. It has
    to be styled separately because it is an anchor -- a real navigation out of the SPA to
    a static page -- and every .quiet rule is scoped to button.quiet. */
