@@ -21,12 +21,13 @@ public class PostgresAnimeRepository implements AnimeRepository {
     @Override
     public void save(Anime anime, byte[] scrubbedJpeg) {
         String sql = """
-            INSERT INTO anime (id, titles, image, source_url)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO anime (id, titles, image, source_url, rank)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE
               SET titles = EXCLUDED.titles,
                   image = EXCLUDED.image,
                   source_url = EXCLUDED.source_url,
+                  rank = EXCLUDED.rank,
                   ingested_at = now()
             """;
         try (Connection conn = db.connection();
@@ -36,6 +37,7 @@ public class PostgresAnimeRepository implements AnimeRepository {
             ps.setArray(2, titles);
             ps.setBytes(3, scrubbedJpeg);
             ps.setString(4, anime.getUrl());
+            ps.setInt(5, anime.getRank());
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Could not save anime " + anime.getId(), e);
@@ -45,15 +47,20 @@ public class PostgresAnimeRepository implements AnimeRepository {
     // Deliberately does not select the image column: starting a round should move a few
     // hundred bytes, with the picture travelling separately through GET /image/{id}.
     @Override
-    public Anime randomExcluding(Set<Integer> usedIds) {
-        String sql = "SELECT id, titles FROM anime WHERE id <> ALL(?) ORDER BY random() LIMIT 1";
+    public Anime randomExcluding(Set<Integer> usedIds, int maxRank) {
+        String sql = """
+            SELECT id, titles, rank FROM anime
+            WHERE id <> ALL(?) AND rank <= ?
+            ORDER BY random() LIMIT 1
+            """;
         try (Connection conn = db.connection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setArray(1, conn.createArrayOf("integer", usedIds.toArray(new Integer[0])));
+            ps.setInt(2, maxRank);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return null;
                 String[] titles = (String[]) rs.getArray("titles").getArray();
-                return new Anime(rs.getInt("id"), "", List.of(titles));
+                return new Anime(rs.getInt("id"), "", List.of(titles), rs.getInt("rank"));
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not pick an anime", e);

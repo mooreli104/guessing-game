@@ -3,8 +3,16 @@ Scene-text detection sidecar for the ingest job.
 
 Tesseract cannot read anime title logotypes -- heavily stylised display type,
 often light-on-light over busy artwork -- so this uses EasyOCR's CRAFT scene-text
-*detector* instead. We only need to know WHERE text is, never what it says, so no
-recognition model is involved.
+detector instead.
+
+Detection alone can't tell an English title from a Japanese one, and guesses are
+always typed in English/romaji, so a visible Japanese-only logo doesn't hand over
+the answer the way a visible English one does. Recognising each detected box (not
+just locating it) lets Japanese-only text stay on the cover while English text is
+still blanked. Recognition on these stylised fonts is unreliable, so any box that
+isn't confidently Japanese-only -- including recognition failing outright -- is
+blanked; the risk we're managing is leaking the English answer, not leaving a few
+extra Japanese boxes covered.
 
 Runs as a long-lived process because loading the model takes several seconds and
 the ingest job scrubs hundreds of images:
@@ -19,6 +27,7 @@ no WebP reader, and about a quarter of MAL's covers are WebP.
 """
 
 import json
+import re
 import sys
 
 import numpy as np
@@ -29,6 +38,11 @@ PADDING = 6
 # A scrub that covers more than this much of the frame leaves too little to guess from.
 MAX_BOXED_FRACTION = 0.35
 JPEG_QUALITY = 88
+# A skipped Japanese box is only "the same box" on re-detection if most of it lines up.
+OVERLAP_THRESHOLD = 0.5
+
+_LATIN_LETTER = re.compile(r"[A-Za-z]")
+_JAPANESE_ONLY = re.compile(r"^[぀-ゟ゠-ヿ一-鿿]+$")
 
 
 def reply(**kwargs):
@@ -36,36 +50,64 @@ def reply(**kwargs):
     sys.stdout.flush()
 
 
-def detect_boxes(reader, image):
-    """Axis-aligned [x0, y0, x1, y1] boxes for every text region found."""
-    horizontal, free = reader.detect(np.array(image))
-    boxes = []
-    # EasyOCR returns horizontal boxes as [x_min, x_max, y_min, y_max].
-    for b in (horizontal[0] if horizontal and len(horizontal[0]) else []):
-        boxes.append([int(b[0]), int(b[2]), int(b[1]), int(b[3])])
-    # Rotated text comes back as a quad; take its bounding box.
-    for quad in (free[0] if free and len(free[0]) else []):
+def classify(text):
+    """"latin" (must be blanked), "japanese" (safe to leave alone), or "ambiguous"
+    (blanked like latin -- empty/garbled recognition might still be English hiding
+    in a stylised font)."""
+    if _LATIN_LETTER.search(text):
+        return "latin"
+    if _JAPANESE_ONLY.match(text.replace(" ", "")):
+        return "japanese"
+    return "ambiguous"
+
+
+def read_regions(reader, image):
+    """[(x0, y0, x1, y1, text), ...] for every text region found, axis-aligned."""
+    regions = []
+    for quad, text, _confidence in reader.readtext(np.array(image)):
         a = np.array(quad)
-        boxes.append([int(a[:, 0].min()), int(a[:, 1].min()),
-                      int(a[:, 0].max()), int(a[:, 1].max())])
-    return boxes
+        regions.append((
+            int(a[:, 0].min()), int(a[:, 1].min()),
+            int(a[:, 0].max()), int(a[:, 1].max()),
+            text,
+        ))
+    return regions
+
+
+def _overlaps(box, others):
+    x0, y0, x1, y1 = box
+    area = (x1 - x0) * (y1 - y0)
+    if area <= 0:
+        return False
+    for ox0, oy0, ox1, oy1 in others:
+        ix0, iy0 = max(x0, ox0), max(y0, oy0)
+        ix1, iy1 = min(x1, ox1), min(y1, oy1)
+        if ix1 <= ix0 or iy1 <= iy0:
+            continue
+        if (ix1 - ix0) * (iy1 - iy0) / area > OVERLAP_THRESHOLD:
+            return True
+    return False
 
 
 def scrub(reader, in_path, out_path):
     image = Image.open(in_path).convert("RGB")
     width, height = image.size
 
-    boxes = detect_boxes(reader, image)
+    regions = read_regions(reader, image)
     # Every cover carries text. Zero detections means detection failed rather than
     # that the cover is clean, and treating that as success is how a leaky image
     # reaches a player.
-    if not boxes:
+    if not regions:
         return False, "no text detected", 0.0
 
     scrubbed = image.copy()
     draw = ImageDraw.Draw(scrubbed)
     boxed_area = 0
-    for x0, y0, x1, y1 in boxes:
+    skipped_boxes = []
+    for x0, y0, x1, y1, text in regions:
+        if classify(text) == "japanese":
+            skipped_boxes.append((x0, y0, x1, y1))
+            continue
         x0 = max(0, x0 - PADDING)
         y0 = max(0, y0 - PADDING)
         x1 = min(width, x1 + PADDING)
@@ -77,12 +119,17 @@ def scrub(reader, in_path, out_path):
     if boxed_fraction > MAX_BOXED_FRACTION:
         return False, "boxed area too large (%.0f%%)" % (boxed_fraction * 100), boxed_fraction
 
-    # Verify by re-detecting: if any text region still stands, reject. This is a
-    # stronger check than re-reading the text would be, because it does not depend
-    # on the title being legible to a recogniser.
-    survivors = detect_boxes(reader, scrubbed)
-    if survivors:
-        return False, "%d text region(s) survived" % len(survivors), boxed_fraction
+    # Verify by re-detecting: a surviving Japanese box is expected -- it's the one we
+    # deliberately left -- as long as it lines up with a box we chose to skip above.
+    # Anything else surviving (new text, or anything not confidently Japanese-only)
+    # means a leak.
+    survivors = read_regions(reader, scrubbed)
+    leaks = [
+        region for region in survivors
+        if not (classify(region[4]) == "japanese" and _overlaps(region[:4], skipped_boxes))
+    ]
+    if leaks:
+        return False, "%d text region(s) survived" % len(leaks), boxed_fraction
 
     scrubbed.save(out_path, "JPEG", quality=JPEG_QUALITY)
     return True, None, boxed_fraction
@@ -90,8 +137,8 @@ def scrub(reader, in_path, out_path):
 
 def main():
     import easyocr
-    # Japanese as well as English: many covers carry the Japanese title alongside
-    # the romanised one, and missing those would defeat the purpose.
+    # Japanese as well as English: classify() needs to tell the two apart, and a
+    # reader without "ja" loaded would just fail to recognise Japanese text at all.
     reader = easyocr.Reader(["en", "ja"], gpu=False, verbose=False)
     reply(ready=True)
 

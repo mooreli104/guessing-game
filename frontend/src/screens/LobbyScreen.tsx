@@ -1,17 +1,47 @@
 import { useState } from "react";
 import { useGame } from "../GameContext";
+import type { Difficulty } from "../types";
+
+const DIFFICULTIES: { value: Difficulty; label: string; blurb: string }[] = [
+  { value: "EASY", label: "Easy", blurb: "The best-known anime" },
+  { value: "NORMAL", label: "Normal", blurb: "A wider net" },
+  { value: "HARD", label: "Hard", blurb: "Anything in the pool" },
+];
+
+// The settings fields hold strings, not numbers, and are only clamped once the user
+// leaves them. Two bugs came out of doing it the other way round:
+//
+//   - Clamping on every keystroke made the minimum unreachable from above. Typing "45"
+//     into Seconds (min 5) hit Math.max(5, 4) on the first keystroke, so the box became
+//     "5" and the next keystroke gave "55".
+//   - React never normalises a type="number" box whose text already parses to the state
+//     number -- it compares them with != , not !== (react-dom updateProperties). With a
+//     number in state, "010" == 10 is true, so a stray leading zero was there for good.
+//     Comparing string to string leaves that quirk with nothing to bite on.
+function clamp(raw: string, min: number): string {
+  const n = Math.floor(Number(raw));
+  // Number("") is 0 and Number("abc") is NaN; both mean "nothing usable typed".
+  return !Number.isFinite(n) || n < min ? String(min) : String(n);
+}
 
 export default function LobbyScreen() {
   const { state, send, leaveLobby } = useGame();
-  const [rounds, setRounds] = useState(3);
-  const [seconds, setSeconds] = useState(30);
+  const [rounds, setRounds] = useState("3");
+  const [seconds, setSeconds] = useState("30");
+  const [difficulty, setDifficulty] = useState<Difficulty>("NORMAL");
   const [copied, setCopied] = useState(false);
 
   const isHost = state.host === state.playerId;
   const players = Object.entries(state.players);
 
   function startGame() {
-    send({ type: "START_GAME", rounds, roundSeconds: seconds });
+    // Clamp again here: the host can hit Start without ever blurring a field.
+    send({
+      type: "START_GAME",
+      rounds: Number(clamp(rounds, 1)),
+      roundSeconds: Number(clamp(seconds, 5)),
+      difficulty,
+    });
   }
 
   function copyCode() {
@@ -60,7 +90,8 @@ export default function LobbyScreen() {
                   type="number"
                   min={1}
                   value={rounds}
-                  onChange={(e) => setRounds(Number(e.target.value))}
+                  onChange={(e) => setRounds(e.target.value)}
+                  onBlur={() => setRounds(clamp(rounds, 1))}
                 />
               </div>
               <div>
@@ -69,8 +100,28 @@ export default function LobbyScreen() {
                   type="number"
                   min={5}
                   value={seconds}
-                  onChange={(e) => setSeconds(Number(e.target.value))}
+                  onChange={(e) => setSeconds(e.target.value)}
+                  onBlur={() => setSeconds(clamp(seconds, 5))}
                 />
+              </div>
+            </div>
+
+            <div>
+              <div className="field-label">Difficulty</div>
+              <div className="difficulty">
+                {DIFFICULTIES.map((d) => (
+                  <button
+                    key={d.value}
+                    className={d.value === difficulty ? "pick on" : "pick"}
+                    onClick={() => setDifficulty(d.value)}
+                    aria-pressed={d.value === difficulty}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <div className="hint">
+                {DIFFICULTIES.find((d) => d.value === difficulty)?.blurb}
               </div>
             </div>
 

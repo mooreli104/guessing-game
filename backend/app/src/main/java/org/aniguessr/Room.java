@@ -7,6 +7,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
 
+/**
+ * Per-room game state. None of these fields is synchronized or volatile: the invariant is
+ * that every read and write happens inside a {@code synchronized (room)} block in
+ * {@link GameManager}, which is the only class that touches a Room. Accessors that hand
+ * out collections return copies so a caller cannot mutate room state from outside that
+ * lock by accident.
+ */
 public class Room {
     private final String id;
     private String code;
@@ -16,8 +23,15 @@ public class Room {
     private int round;
     private int totalRounds;
     private int roundSeconds;
+    // Worst MAL popularity rank a round may draw from -- the difficulty the host chose,
+    // already resolved to a number by GameManager. Integer.MAX_VALUE means the whole pool.
+    private int maxRank;
     private long roundStartMillis;
     private Anime anime;
+    // Opaque public handle for the current round's cover. Deliberately not the anime id:
+    // the anime id is MyAnimeList's, so putting it in the image URL would hand over the
+    // answer. GameManager mints one per round and maps it back.
+    private String imageToken;
     private final Set<String> guessedCorrectly;
     // Anime already shown this game, so a round never repeats one.
     private final Set<Integer> usedAnimeIds;
@@ -31,6 +45,7 @@ public class Room {
         this.round = 1;
         this.totalRounds = 0;
         this.roundSeconds = 0;
+        this.maxRank = Integer.MAX_VALUE;
         this.roundStartMillis = 0;
         this.anime = new Anime();
         this.guessedCorrectly = new HashSet<>();
@@ -49,15 +64,27 @@ public class Room {
     public void setTotalRounds(int totalRounds) { this.totalRounds = totalRounds; }
     public int getRoundSeconds() { return roundSeconds; }
     public void setRoundSeconds(int roundSeconds) { this.roundSeconds = roundSeconds; }
+    public int getMaxRank() { return maxRank; }
+    public void setMaxRank(int maxRank) { this.maxRank = maxRank; }
     public long getRoundStartMillis() { return roundStartMillis; }
     public void setRoundStartMillis(long roundStartMillis) { this.roundStartMillis = roundStartMillis; }
     public Anime getAnime() { return this.anime; }
     public void setAnime(Anime anime) { this.anime = anime; }
 
-    public Set<String> getGuessedCorrectly() { return guessedCorrectly; }
+    public String getImageToken() { return imageToken; }
+    public void setImageToken(String imageToken) { this.imageToken = imageToken; }
+
+    public Set<String> getGuessedCorrectly() { return Set.copyOf(guessedCorrectly); }
     public boolean hasGuessed(String playerId) { return guessedCorrectly.contains(playerId); }
     public void markGuessed(String playerId) { guessedCorrectly.add(playerId); }
     public void clearGuessed() { guessedCorrectly.clear(); }
+
+    /**
+     * Drop one player from the round's correct-guess set. Called when they leave: the
+     * early-finish check compares this set's size against the player count, so a departed
+     * player left behind here would end later rounds early.
+     */
+    public void clearGuessedFor(String playerId) { guessedCorrectly.remove(playerId); }
 
     public Set<Integer> getUsedAnimeIds() { return Set.copyOf(usedAnimeIds); }
     public void markAnimeUsed(int id) { usedAnimeIds.add(id); }

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <title>How to play OtakuGuessr — the anime cover guessing game</title>
+    <meta
+      name="description"
+      content="How OtakuGuessr works: make a room, share the 4-character code, and race your friends to name the anime from a cover with its title scrubbed out. Rounds, difficulty, scoring and guess matching explained."
+    />
+    <!-- The .html is in the URL on purpose. Served as how-to-play/index.html it would
+         resolve at /how-to-play under Javalin but only at /how-to-play/ under the Vite
+         preview server, whose SPA fallback answers the extension-less path with the app's
+         index.html instead. A flat file is an exact match in both. -->
+    <link rel="canonical" href="https://otakuguessr.com/how-to-play.html" />
+    <meta name="theme-color" content="#241245" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="OtakuGuessr" />
+    <meta property="og:url" content="https://otakuguessr.com/how-to-play.html" />
+    <meta property="og:title" content="How to play OtakuGuessr" />
+    <meta
+      property="og:description"
+      content="Make a room, share the 4-character code, and race your friends to name the anime from a cover with its title scrubbed out."
+    />
+    <meta property="og:image" content="https://otakuguessr.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <style>
+      /* This page is a plain static file, so it cannot use src/styles.css -- that ships
+         inside the hash-named bundle and only the React app can reach it. The values
+         below are copied from the `:root` block there, which stays the source of truth;
+         change them there first. The bundled webfonts are out of reach for the same
+         reason, hence the system stack. */
+      :root {
+        --grape-deep: #241245;
+        --grape-line: #170b2e;
+        --cream: #fff6ec;
+        --sun: #ffc93c;
+        --punch: #ff4d6d;
+        --ink: #241245;
+        --ink-soft: #6b5b8a;
+        --radius: 18px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, sans-serif;
+        line-height: 1.6;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 50% 0%, #552d9c 0%, transparent 60%),
+          var(--grape-deep);
+        background-attachment: fixed;
+      }
+
+      .page {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 40px 16px 64px;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 28px;
+      }
+
+      .wordmark {
+        display: inline-block;
+        font-size: clamp(34px, 10vw, 48px);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: var(--cream);
+        text-shadow: 0 4px 0 var(--grape-line);
+        text-decoration: none;
+      }
+
+      .wordmark span {
+        color: var(--sun);
+      }
+
+      .panel {
+        background: var(--cream);
+        border-radius: var(--radius);
+        padding: 28px 26px;
+        box-shadow: 0 6px 0 var(--grape-line);
+      }
+
+      h1 {
+        font-size: 28px;
+        line-height: 1.25;
+        margin: 0 0 6px;
+      }
+
+      h2 {
+        font-size: 19px;
+        margin: 28px 0 6px;
+      }
+
+      .lede {
+        color: var(--ink-soft);
+        margin: 0;
+      }
+
+      ul {
+        padding-left: 20px;
+      }
+
+      li {
+        margin-bottom: 6px;
+      }
+
+      code {
+        background: #efe3d5;
+        border-radius: 5px;
+        padding: 1px 6px;
+        font-size: 0.92em;
+      }
+
+      a {
+        color: #8a4bd8;
+      }
+
+      .back {
+        display: block;
+        text-align: center;
+        margin-top: 26px;
+        color: var(--sun);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .back:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <a class="wordmark" href="/">Otaku<span>Guessr</span></a>
+      </header>
+
+      <main class="panel">
+        <h1>How to play OtakuGuessr</h1>
+        <p class="lede">
+          An anime guessing game for a call with friends. Everyone sees the same cover with
+          the title scrubbed out of the artwork, and the first person to type the show's
+          name takes the round.
+        </p>
+
+        <h2>Getting a game going</h2>
+        <p>
+          Pick a name and hit <strong>Create room</strong>. You'll get a four-character room
+          code — paste it to your friends, and they enter it under <strong>Join</strong> on
+          the same page. There's nothing to install and no account to make; it all runs in
+          the browser.
+        </p>
+        <p>
+          Whoever made the room is the host and starts the game. People can join a room
+          that's already running — they'll drop straight into the current round rather than
+          waiting on the lobby screen.
+        </p>
+
+        <h2>Settings the host picks</h2>
+        <ul>
+          <li><strong>Rounds</strong> — how many covers you'll play through.</li>
+          <li><strong>Seconds per round</strong> — the clock on each cover.</li>
+          <li>
+            <strong>Difficulty</strong> — which slice of the pool you're drawing from.
+            <em>Easy</em> is the best-known anime, <em>Normal</em> casts a wider net, and
+            <em>Hard</em> is anything in the pool at all.
+          </li>
+        </ul>
+        <p>
+          A room never shows you the same anime twice, even across several games — so
+          hitting "play again" keeps giving you new covers.
+        </p>
+
+        <h2>What counts as a correct guess</h2>
+        <p>
+          You don't have to be exact. Guesses are matched with a little slack, so spelling
+          slips don't cost you the round:
+        </p>
+        <ul>
+          <li>Capitalisation and surrounding spaces are ignored.</li>
+          <li>
+            Typos are forgiven in proportion to length — one for a short title, two for a
+            longer one.
+          </li>
+          <li>
+            For a title with a subtitle, the main name is enough:
+            <code>demon slayer</code> is accepted for
+            <em>Demon Slayer: Mugen Train</em>. The subtitle on its own isn't —
+            <code>mugen train</code> won't do it, since that names the arc rather than the
+            show.
+          </li>
+          <li>
+            A distinctive single word usually works, and can be misspelled too, so
+            <code>frieren</code> lands.
+          </li>
+          <li>
+            Both English and Japanese titles are accepted where a show has both.
+          </li>
+        </ul>
+        <p>Wrong guesses cost you nothing but time — keep typing.</p>
+
+        <h2>Scoring</h2>
+        <p>
+          Speed is the whole game. A correct guess is worth up to 1000 points, sliding down
+          to a floor of 100 as the round clock runs out, so answering early is worth far
+          more than answering safely. Once everybody in the room has guessed correctly the
+          round ends immediately instead of playing out the timer.
+        </p>
+
+        <h2>If you get knocked offline</h2>
+        <p>
+          Refreshing the page won't remove you from your room. The game holds your seat for
+          a few seconds and puts you back into the round in progress, with the cover and the
+          remaining time intact. If your connection drops, the page reconnects on its own.
+        </p>
+
+        <h2>Where the covers come from</h2>
+        <p>
+          Artwork is drawn from MyAnimeList's popularity ranking. Nearly every cover has its
+          title printed into the picture, which would give the answer away, so the titles are
+          detected and blanked out ahead of time — that black band across the artwork is the
+          part that got scrubbed.
+        </p>
+      </main>
+
+      <a class="back" href="/">← Start a game</a>
+    </div>
+  </body>
+</html>

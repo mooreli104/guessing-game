@@ -7,6 +7,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Properties;
 
 /**
  * Owns the JDBC URL and hands out connections. No connection pool: ingest is a
@@ -15,7 +16,15 @@ import java.sql.Statement;
  */
 public class Db {
 
-    private final String url;
+    /**
+     * A JDBC URL and, separately, the credentials to present with it. Keeping them apart
+     * means the password is handed to the driver as a connection property rather than
+     * embedded in the URL, where it would ride along into any exception or log line that
+     * echoes the URL back.
+     */
+    record Target(String url, String user, String password) {}
+
+    private final Target target;
 
     public Db() {
         this(System.getenv("DATABASE_URL"));
@@ -25,21 +34,22 @@ public class Db {
         if (url == null || url.isBlank()) {
             throw new IllegalStateException("DATABASE_URL is not set");
         }
-        this.url = toJdbcUrl(url);
+        this.target = parse(url);
     }
 
     /**
      * Accepts either a JDBC URL or the libqp-style {@code postgres://user:pass@host/db}
      * URL that hosting providers inject, and always returns something the JDBC driver
      * understands. A URL that is already {@code jdbc:} is returned untouched, so local
-     * development is unaffected.
+     * development is unaffected -- which also means its credentials stay in the URL,
+     * because that is the form the developer wrote them in.
      */
-    static String toJdbcUrl(String raw) {
+    static Target parse(String raw) {
         if (raw.startsWith("jdbc:")) {
-            return raw;
+            return new Target(raw, "", "");
         }
         if (!raw.startsWith("postgres://") && !raw.startsWith("postgresql://")) {
-            return raw;   // something we do not recognise; let the driver complain
+            return new Target(raw, "", "");   // unrecognised; let the driver complain
         }
 
         URI uri;
@@ -58,8 +68,7 @@ public class Db {
         int port = uri.getPort() == -1 ? 5432 : uri.getPort();
         String database = uri.getPath() == null ? "" : uri.getPath().replaceFirst("^/", "");
 
-        // getUserInfo decodes percent-escapes for us; we re-encode below for the query
-        // string, so a password containing & or = cannot split it.
+        // getUserInfo decodes percent-escapes for us.
         String user = "";
         String password = "";
         String userInfo = uri.getUserInfo();
@@ -73,10 +82,25 @@ public class Db {
             }
         }
 
-        return "jdbc:postgresql://" + host + ":" + port + "/" + database
-            + "?user=" + encode(user)
-            + "&password=" + encode(password)
-            + "&sslmode=" + (isLocal(host) ? "disable" : "require");
+        String url = "jdbc:postgresql://" + host + ":" + port + "/" + database
+            + "?sslmode=" + (isLocal(host) ? "disable" : "require");
+        return new Target(url, user, password);
+    }
+
+    /**
+     * The full JDBC URL including credentials. Only {@link #connection()} needs the
+     * credentials split out; this remains the plain translation, and is what a developer
+     * would paste to connect by hand.
+     *
+     * Values are percent-encoded here, so a password containing {@code &} or {@code =}
+     * cannot split the query string.
+     */
+    static String toJdbcUrl(String raw) {
+        Target t = parse(raw);
+        if (t.user().isEmpty() && t.password().isEmpty()) {
+            return t.url();
+        }
+        return t.url() + "&user=" + encode(t.user()) + "&password=" + encode(t.password());
     }
 
     /**
@@ -99,7 +123,14 @@ public class Db {
     }
 
     public Connection connection() throws SQLException {
-        return DriverManager.getConnection(url);
+        if (target.user().isEmpty() && target.password().isEmpty()) {
+            // A jdbc: URL carries its own credentials in the query string.
+            return DriverManager.getConnection(target.url());
+        }
+        Properties props = new Properties();
+        props.setProperty("user", target.user());
+        props.setProperty("password", target.password());
+        return DriverManager.getConnection(target.url(), props);
     }
 
     public void createTable() {
@@ -109,13 +140,38 @@ public class Db {
               titles      TEXT[]      NOT NULL,
               image       BYTEA       NOT NULL,
               source_url  TEXT        NOT NULL,
+              rank        INTEGER     NOT NULL DEFAULT 0,
               ingested_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """;
+        // CREATE TABLE IF NOT EXISTS does nothing at all to a table that already exists,
+        // so the rank column would never appear on a database ingested before it was
+        // added. Adding it separately is what actually migrates those.
+        String addRank = "ALTER TABLE anime ADD COLUMN IF NOT EXISTS rank INTEGER NOT NULL DEFAULT 0";
+        try (Connection conn = connection(); Statement st = conn.createStatement()) {
+            st.execute(sql);
+            st.execute(addRank);
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not create the anime table", e);
+        }
+    }
+
+    public void createFeedbackTable() {
+        // Deliberately no foreign key to anything: feedback arrives from anyone who has
+        // the page open, whether or not they were ever in a room.
+        String sql = """
+            CREATE TABLE IF NOT EXISTS feedback (
+              id         BIGSERIAL   PRIMARY KEY,
+              kind       TEXT        NOT NULL,
+              message    TEXT        NOT NULL,
+              contact    TEXT        NOT NULL DEFAULT '',
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
             """;
         try (Connection conn = connection(); Statement st = conn.createStatement()) {
             st.execute(sql);
         } catch (SQLException e) {
-            throw new RuntimeException("Could not create the anime table", e);
+            throw new RuntimeException("Could not create the feedback table", e);
         }
     }
 }

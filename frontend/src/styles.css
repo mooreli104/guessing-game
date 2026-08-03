@@ -275,6 +275,78 @@ input:disabled {
   text-align: center;
 }
 
+/* --- Feedback ------------------------------------------------------------ */
+
+.footer {
+  text-align: center;
+  margin-top: 16px;
+}
+
+/* The how-to-play link sits beside the feedback button and should read the same. It has
+   to be styled separately because it is an anchor -- a real navigation out of the SPA to
+   a static page -- and every .quiet rule is scoped to button.quiet. */
+.footer a {
+  color: #c9b8e8;
+  font-size: 15px;
+  font-weight: 800;
+  font-family: "Baloo 2", Nunito, sans-serif;
+  padding: 8px 14px;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  color: var(--cream);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(16 6 34 / 70%);
+  overflow-y: auto;
+}
+
+.modal {
+  width: min(460px, 100%);
+  text-align: left;
+}
+
+/* Inherits the input border/focus treatment so the two fields match. */
+textarea {
+  font-family: Nunito, sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ink);
+  width: 100%;
+  padding: 13px 16px;
+  background: #fff;
+  border: 3px solid #e5d9ee;
+  border-radius: 14px;
+  outline: none;
+  resize: vertical;
+  transition: border-color 120ms ease;
+}
+
+textarea::placeholder {
+  color: #b3a6c6;
+  font-weight: 600;
+}
+
+textarea:focus {
+  border-color: var(--punch);
+}
+
+.counter {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-align: right;
+}
+
 .reconnecting {
   color: var(--cream);
   text-align: center;
@@ -282,6 +354,23 @@ input:disabled {
   font-family: "Baloo 2", sans-serif;
   font-size: 22px;
   font-weight: 800;
+}
+
+/* The socket dropped mid-session. Floated rather than in flow so the game underneath
+   does not jump, and quiet -- the client retries on its own and usually wins. */
+.offline {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: var(--sun);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 14px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  box-shadow: 0 3px 0 var(--sun-lip);
 }
 
 /* --- Lobby --------------------------------------------------------------- */
@@ -342,6 +431,39 @@ input:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+/* Three pills, one lit. Same bottom-lip trick as every other pressable thing --
+   the selected one simply sits down on its lip and stays there. */
+.difficulty {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.difficulty .pick {
+  width: 100%;
+  padding: 10px 6px;
+  font: inherit;
+  font-weight: 800;
+  color: var(--ink);
+  background: #efe6f7;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #ddd0e8;
+  transition: transform 0.03s ease;
+}
+
+.difficulty .pick.on {
+  background: var(--sun);
+  box-shadow: 0 3px 0 var(--sun-lip);
+}
+
+.difficulty .pick:active {
+  transform: translateY(3px);
+  box-shadow: none;
 }
 
 .waiting {

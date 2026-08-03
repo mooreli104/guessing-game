@@ -15,15 +15,20 @@ public class MalClient {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    // Read from the environment the way Db reads DATABASE_URL, so a deployment can
-    // supply its own. Falls back to the original value so nothing breaks if it's unset.
-    private static final String CLIENT_ID = clientId();
-
+    /**
+     * Read from the environment the way Db reads DATABASE_URL. There used to be a
+     * hardcoded client ID here as a fallback, which meant a credential sat in the source
+     * and in git history. Ingest is an offline batch job run by hand, so requiring the
+     * variable costs nothing and failing loudly beats quietly using someone else's key.
+     */
     private static String clientId() {
         String fromEnv = System.getenv("MAL_CLIENT_ID");
-        return (fromEnv == null || fromEnv.isBlank())
-            ? "56c16cf022ffb0fe939e03a8a7c40f5b"
-            : fromEnv;
+        if (fromEnv == null || fromEnv.isBlank()) {
+            throw new IllegalStateException(
+                "MAL_CLIENT_ID is not set. Register an application at "
+                    + "https://myanimelist.net/apiconfig and export its client ID.");
+        }
+        return fromEnv;
     }
 
     public static HttpResponse.BodyHandler<List<Anime>> responseBodyHandler(){
@@ -37,8 +42,18 @@ public class MalClient {
                     for (JsonNode entry : root.get("data")) {
                         JsonNode node = entry.get("node");
 
-                        // Ask for the large picture: Tesseract reads bigger text far more
-                        // accurately, and it displays better too.
+                        // Position in the ranking we asked for, 1 being the most watched.
+                        // Stored so a round can be restricted to titles players have
+                        // plausibly heard of. Read from the response rather than counted
+                        // locally, so entries skipped below do not shift everything after
+                        // them. MAL always sends it; the fallback is only for safety.
+                        JsonNode ranking = entry.get("ranking");
+                        int rank = ranking == null || ranking.get("rank") == null
+                            ? 0
+                            : ranking.get("rank").asInt();
+
+                        // Ask for the large picture: the scrubber's detector locates text
+                        // far more reliably on it, and it displays better too.
                         JsonNode picture = node.get("main_picture");
                         if (picture == null || picture.get("large") == null) continue;
                         String url = picture.get("large").asText();
@@ -64,7 +79,7 @@ public class MalClient {
                             }
                         }
 
-                        page.add(new Anime(id, url, titles));
+                        page.add(new Anime(id, url, titles, rank));
                     }
                     return page;
                 } catch (Exception e) {
@@ -75,14 +90,20 @@ public class MalClient {
     }
 
     // Synchronous: ingest is a batch job, and there is nothing to overlap it with.
+    //
+    // ranking_type is bypopularity, not all. The "all" ranking sorts by weighted score,
+    // which past the first few hundred entries is mostly high-rated OVAs, specials and
+    // sequels-of-sequels -- adored by few, recognised by fewer, and unguessable from a
+    // cover. Popularity sorts by member count, which is the "have people actually watched
+    // this" axis the game needs.
     public static List<Anime> fetchPage(int offset, int limit) throws Exception {
         HttpClient client = HttpClient.newBuilder().build();
 
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create("https://api.myanimelist.net/v2/anime/ranking?ranking_type=all"
+            .uri(URI.create("https://api.myanimelist.net/v2/anime/ranking?ranking_type=bypopularity"
                 + "&limit=" + limit + "&offset=" + offset
                 + "&fields=alternative_titles,main_picture"))
-            .header("X-MAL-CLIENT-ID", CLIENT_ID)
+            .header("X-MAL-CLIENT-ID", clientId())
             .build();
 
         return client.send(request, responseBodyHandler()).body();

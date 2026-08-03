@@ -4,12 +4,17 @@
 export type Player = { name: string; score: number };
 export type Players = Record<string, Player>;
 
+// How obscure a round may get. The client sends the name, never a number: the server maps
+// it to a MyAnimeList popularity rank cap in GameManager.rankCapFor, so the thresholds can
+// be retuned without shipping a new bundle.
+export type Difficulty = "EASY" | "NORMAL" | "HARD";
+
 // Messages this client sends to the server.
 export type ClientMsg =
   | { type: "CREATE_ROOM"; username: string }
   | { type: "JOIN_ROOM"; username: string; code: string }
   | { type: "RESUME"; playerId: string; code: string }
-  | { type: "START_GAME"; rounds: number; roundSeconds: number }
+  | { type: "START_GAME"; rounds: number; roundSeconds: number; difficulty: Difficulty }
   | { type: "GUESS"; guess: string }
   | { type: "LEAVE_ROOM" };
 
@@ -22,4 +27,15 @@ export type ServerMsg =
   | { type: "GUESS_RESULT"; playerId: string; isCorrect: boolean; points: number; totalScore: number }
   | { type: "ROUND_END"; round: number; answer: string; scores: Players }
   | { type: "GAME_OVER"; scores: Players; winner: string }
-  | { type: "ERROR"; message: string };
+  // `code` is the machine-readable half: the client used to test the human-readable
+  // message with .includes("expired"), so rewording it silently broke resume recovery.
+  | { type: "ERROR"; code: ErrorCode; message: string };
+
+export type ErrorCode =
+  | "BAD_MESSAGE"
+  | "ROOM_NOT_FOUND"
+  | "SESSION_EXPIRED"
+  | "NOT_IN_ROOM"
+  | "NOT_HOST"
+  | "ALREADY_STARTED"
+  | "NO_ANIME";

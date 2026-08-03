@@ -10,8 +10,14 @@ public interface AnimeRepository {
 
     void save(Anime anime, byte[] scrubbedJpeg);
 
-    /** The answer for a round. Null when every anime in the pool is excluded. */
-    Anime randomExcluding(Set<Integer> usedIds);
+    /**
+     * The answer for a round, drawn from anime ranked no worse than {@code maxRank}.
+     * That cap is how difficulty is applied — see {@code GameManager.rankCapFor}. Pass
+     * {@link Integer#MAX_VALUE} for the whole pool.
+     *
+     * Null when nothing is left: every candidate excluded, or none inside the cap.
+     */
+    Anime randomExcluding(Set<Integer> usedIds, int maxRank);
 
     /** Scrubbed JPEG bytes for GET /image/{id}. Null when the id is unknown. */
     byte[] imageBytes(int id);
