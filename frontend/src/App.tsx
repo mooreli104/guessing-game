@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { useGame } from "./GameContext";
 import HomeScreen from "./screens/HomeScreen";
 import LobbyScreen from "./screens/LobbyScreen";
 import GameScreen from "./screens/GameScreen";
 import OverScreen from "./screens/OverScreen";
+import FeedbackModal from "./FeedbackModal";
 
 export default function App() {
   const { state } = useGame();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   if (state.resuming) {
     return <div className="reconnecting">Reconnecting…</div>;
@@ -16,6 +19,11 @@ export default function App() {
       {state.everConnected && !state.connected && <div className="offline">Reconnecting…</div>}
       {state.error && <div className="error">{state.error}</div>}
       {renderScreen(state.screen)}
+
+      <button className="quiet feedback-fab" onClick={() => setFeedbackOpen(true)}>
+        Leave any feedback
+      </button>
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </>
   );
 }
